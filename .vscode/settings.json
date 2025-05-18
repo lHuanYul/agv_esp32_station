@@ -20,6 +20,8 @@
     "freertos.h": "c",
     "sockets.h": "c",
     "cstdlib": "c",
-    "wifi_tr_re.h": "c"
+    "wifi_tr_re.h": "c",
+    "string.h": "c",
+    "wifi_connect.h": "c"
   }
 }

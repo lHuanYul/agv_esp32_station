@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "esp_system.h"
@@ -6,17 +7,20 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
+#include "lwip/sockets.h"
 #include "wifi_connect.h"
 
-#define EXAMPLE_ESP_WIFI_SSID      "HY-TPL-BF94"
-#define EXAMPLE_ESP_WIFI_PASS      "23603356"
-#define EXAMPLE_ESP_MAXIMUM_RETRY  5
-
-static EventGroupHandle_t s_wifi_event_group;
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+#define CONNECT_MAXIMUM_RETRY   5
+#define WIFI_CONNECTED_BIT      BIT0
+#define WIFI_FAIL_BIT           BIT1
 
 static const char *TAG = "wifi connect";
+
+char connect_wifi_ssid[] = "HY-TPL-BF94";
+char connect_wifi_pswd[] = "23603356";
+char connect_wifi_DHCP[] = "192.168.0.20";
+
+static EventGroupHandle_t s_wifi_event_group;
 static int wifi_connect_retry_count = 0;
 
 /**
@@ -43,7 +47,7 @@ static void wifi_connect_event_handler(
     }
     // On disconnection, retry or signal failure
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (wifi_connect_retry_count < EXAMPLE_ESP_MAXIMUM_RETRY) {
+        if (wifi_connect_retry_count < CONNECT_MAXIMUM_RETRY) {
             esp_wifi_connect();
             wifi_connect_retry_count++;
             ESP_LOGI(TAG, "retry to connect to the AP");
@@ -77,8 +81,20 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     // Create default event loop
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
     // Create default Wi-Fi station
-    esp_netif_create_default_wifi_sta();
+    esp_netif_t* sta_netif = esp_netif_create_default_wifi_sta();
+    ESP_ERROR_CHECK(esp_netif_dhcpc_stop(sta_netif));
+    esp_netif_ip_info_t ip_info;
+    // 預設閘道
+    inet_pton(AF_INET, "192.168.0.1", &ip_info.gw);
+    // 本機 IP
+    inet_pton(AF_INET, connect_wifi_DHCP, &ip_info.ip);
+    // 子網遮罩
+    inet_pton(AF_INET, "255.255.255.0", &ip_info.netmask);
+    ESP_ERROR_CHECK(esp_netif_set_ip_info(sta_netif, &ip_info));
+
+
     // Initialize Wi-Fi driver
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -88,13 +104,12 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_connect_event_handler, NULL, NULL));
     
     // Configure Wi-Fi connection parameters
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .password = EXAMPLE_ESP_WIFI_PASS,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-        },
-    };
+    wifi_config_t wifi_config;
+    memset(&wifi_config, 0, sizeof(wifi_config));
+    strcpy((char *)wifi_config.sta.ssid,     connect_wifi_ssid);
+    strcpy((char *)wifi_config.sta.password, connect_wifi_pswd);
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+
     // Set Wi-Fi mode to Station
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     // Set Station configuration
@@ -103,7 +118,7 @@ void wifi_init_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
 
     // Wait for connection result: success or fail
-    ESP_LOGI(TAG, "Connecting to SSID:%s...", EXAMPLE_ESP_WIFI_SSID);
+    ESP_LOGI(TAG, "Connecting to SSID:%s...", connect_wifi_ssid);
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
             pdFALSE, pdFALSE, portMAX_DELAY);
@@ -111,12 +126,12 @@ void wifi_init_sta(void) {
     // Connected successfully
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+                 connect_wifi_ssid, connect_wifi_pswd);
     }
     // Failed to connect
     else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+                 connect_wifi_ssid, connect_wifi_pswd);
     }
 
     // Delete event group
