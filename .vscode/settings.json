@@ -1,0 +1,25 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.espIdfPathWin": "c:\\Program_HY\\esp32\\v5.4.1\\esp-idf",
+  "idf.toolsPathWin": "c:\\Program_HY\\esp32\\.espressif",
+  "idf.pythonInstallPath": "c:\\Program_HY\\esp32\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.flashType": "UART",
+  "idf.portWin": "COM5",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32"
+  },
+  "files.associations": {
+    "esp_log.h": "c",
+    "esp_wifi.h": "c",
+    "event_groups.h": "c",
+    "task.h": "c",
+    "stdio.h": "c",
+    "stdint.h": "c",
+    "esp_event.h": "c",
+    "netdb.h": "c",
+    "freertos.h": "c",
+    "sockets.h": "c",
+    "cstdlib": "c",
+    "wifi_tr_re.h": "c"
+  }
+}
