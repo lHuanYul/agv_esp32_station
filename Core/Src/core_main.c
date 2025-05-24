@@ -14,18 +14,20 @@
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "wifi_connect.h"
-#include "wifi_tr_re.h"
+#include "wifi_transceive.h"
+#include "uart_async.h"
 
 static const char *TAG = "core main";
 
 void core_main(void)
 {
     wifi_connect_setup();
-    wifi_tr_re_setup();
+    wifi_transceive_setup();
+    uart_main();
 
     while (1) {
         ESP_LOGI(TAG, "Running main loop...");
-        // wifi_udp_transmit();
+        wifi_udp_transmit();
         // wifi_tcp_transmit();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

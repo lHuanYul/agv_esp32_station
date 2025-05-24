@@ -5,7 +5,7 @@
 #include "esp_log.h"
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
-#include "wifi_tr_re.h"
+#include "wifi_transceive.h"
 
 #define TCP_PORT                   60000
 #define UDP_PORT                   60001
@@ -56,7 +56,7 @@ int core_tcp_send(const char *remote_ip, uint16_t remote_port, const char *data,
 
 void wifi_tcp_transmit(void) {
     const char *msg = "Hello from ESP32 by TCP";
-    int sent = core_tcp_send("192.168.0.3", TCP_PORT, msg, strlen(msg));
+    int sent = core_tcp_send("192.168.0.11", TCP_PORT, msg, strlen(msg));
     if (sent < 0) {
         ESP_LOGE(TAG, "TCP send failed: %d", sent);
     }
@@ -142,7 +142,7 @@ static void tcp_receive_task(void *pvParameters) {
  * Send data via UDP to remote_ip:remote_port;
  * returns number of bytes sent or negative errno on error.
  */
-int core_udp_send(const char *remote_ip, uint16_t remote_port, const char *data, size_t len) {
+int core_udp_send(const char *remote_ip, uint16_t remote_port, const VecU8 *vec_u8) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
         ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
@@ -155,8 +155,10 @@ int core_udp_send(const char *remote_ip, uint16_t remote_port, const char *data,
         .sin_addr.s_addr    = inet_addr(remote_ip),
     };
 
+    ESP_LOG_BUFFER_HEXDUMP(TAG, vec_u8->data, vec_u8->length, ESP_LOG_INFO);
+
     int ret = sendto(
-        sock, data, len, 0,
+        sock, vec_u8->data, vec_u8->length, 0,
         (struct sockaddr *)&addr,
         sizeof(addr)
     );
@@ -172,8 +174,10 @@ int core_udp_send(const char *remote_ip, uint16_t remote_port, const char *data,
 }
 
 void wifi_udp_transmit(void) {
+    VecU8 vec_u8 = {0};
     const char *msg = "Hello from ESP32 by UDP";
-    int sent = core_udp_send("192.168.0.3", UDP_PORT, msg, strlen(msg));
+    vec_u8_push(&vec_u8, msg, strlen(msg));
+    int sent = core_udp_send("192.168.0.11", UDP_PORT, &vec_u8);
     if (sent < 0) {
         ESP_LOGE(TAG, "UDP send failed: %d", sent);
     }
@@ -231,7 +235,7 @@ static void udp_receive_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void wifi_tr_re_setup(void) {
+void wifi_transceive_setup(void) {
     xTaskCreate(udp_receive_task, "udp_server", 4096, NULL, 5, NULL);
     BaseType_t ret = xTaskCreate(tcp_receive_task, "tcp_recv", 4096, NULL, 5, NULL);
     if (ret != pdPASS) {
