@@ -81,13 +81,13 @@ VecU8 uart_packet_unpack(const UartPacket *packet) {
  * @brief 全域傳輸緩衝區
  *        Global transmit ring buffer
  */
-UartTrcvBuf transfer_buffer = {0};
+UartTrcvBuf uart_transmit_buffer = {0};
 
 /**
  * @brief 全域接收緩衝區
  *        Global receive ring buffer
  */
-UartTrcvBuf receive_buffer = {0};
+UartTrcvBuf uart_receive_buffer = {0};
 
 /**
  * @brief 建立傳輸/接收環形緩衝區，初始化頭指標與計數
@@ -95,7 +95,7 @@ UartTrcvBuf receive_buffer = {0};
  *
  * @return UartTrcvBuf 初始化後的環形緩衝區 (initialized ring buffer)
  */
-UartTrcvBuf transceive_buffer_new(void) {
+UartTrcvBuf uart_trcv_buffer_new(void) {
     UartTrcvBuf transceive_buffer;
     transceive_buffer.head = 0;
     transceive_buffer.length = 0;
@@ -110,12 +110,18 @@ UartTrcvBuf transceive_buffer_new(void) {
  * @param packet 要推入緩衝區的 UART 封包 (input UART packet)
  * @return bool 是否推入成功 (true if push successful, false if buffer full)
  */
-bool transceive_buffer_push(UartTrcvBuf *buffer, const UartPacket *packet) {
+bool uart_trcv_buffer_push(UartTrcvBuf *buffer, const UartPacket *packet) {
     if (buffer->length >= UART_TRCV_BUF_CAP) return false;
     uint8_t tail = (buffer->head + buffer->length) % UART_TRCV_BUF_CAP;
     buffer->packet[tail] = *packet;
     buffer->length++;
     return true;
+}
+
+bool uart_trcv_buffer_get_front(UartTrcvBuf *buffer, UartPacket *packet) {
+    if (buffer->length == 0) return 0;
+    if (packet != NULL) *packet = buffer->packet[buffer->head];
+    return 1;
 }
 
 /**
@@ -126,34 +132,9 @@ bool transceive_buffer_push(UartTrcvBuf *buffer, const UartPacket *packet) {
  * @param packet 輸出參數，接收彈出的 UART 封包 (output popped UART packet)
  * @return bool 是否彈出成功 (true if pop successful, false if buffer empty)
  */
-bool transceive_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet) {
-    transceive_buffer_pop_firstHalf(buffer, packet);
-    return transceive_buffer_pop_secondHalf(buffer);
-}
-
-/**
- * @brief 環形緩衝區彈出第一階段：讀取隊首封包但不移動頭指標
- *        Ring buffer pop first half: read head packet without moving head index
- *
- * @param buffer 指向環形緩衝區的指標 (input ring buffer)
- * @param packet 輸出參數，接收讀取的封包 (output packet)
- * @return bool 是否讀取成功 (true if read successful, false if buffer empty)
- */
-bool transceive_buffer_pop_firstHalf(const UartTrcvBuf *buffer, UartPacket *packet) {
+bool uart_trcv_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet) {
     if (buffer->length == 0) return 0;
-    *packet = buffer->packet[buffer->head];
-    return 1;
-}
-
-/**
- * @brief 環形緩衝區彈出第二階段：移動頭指標並更新長度
- *        Ring buffer pop second half: advance head index and decrement length
- *
- * @param buffer 指向環形緩衝區的指標 (input/output ring buffer)
- * @return bool 是否更新成功 (true if update successful, false if buffer empty)
- */
-bool transceive_buffer_pop_secondHalf(UartTrcvBuf *buffer) {
-    if (buffer->length == 0) return 0;
+    if (packet != NULL) *packet = buffer->packet[buffer->head];
     if (--buffer->length == 0) {
         buffer->head = 0;
     } else {

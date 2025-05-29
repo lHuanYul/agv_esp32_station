@@ -1,6 +1,7 @@
 #ifndef USER_PACKET_H
 #define USER_PACKET_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "vec_mod.h"
@@ -29,12 +30,11 @@ typedef struct {
     uint8_t     head;
     uint8_t     length;
 } UartTrcvBuf;
-extern UartTrcvBuf transfer_buffer;
-extern UartTrcvBuf receive_buffer;
-UartTrcvBuf transceive_buffer_new(void);
-bool transceive_buffer_push(UartTrcvBuf *transceive_buffer, const UartPacket *packet);
-bool transceive_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet);
-bool transceive_buffer_pop_firstHalf(const UartTrcvBuf *buffer, UartPacket *packet);
-bool transceive_buffer_pop_secondHalf(UartTrcvBuf *transceive_buffer);
+extern UartTrcvBuf uart_transmit_buffer;
+extern UartTrcvBuf uart_receive_buffer;
+UartTrcvBuf uart_trcv_buffer_new(void);
+bool uart_trcv_buffer_push(UartTrcvBuf *transceive_buffer, const UartPacket *packet);
+bool uart_trcv_buffer_get_front(UartTrcvBuf *buffer, UartPacket *packet);
+bool uart_trcv_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet);
 
 #endif

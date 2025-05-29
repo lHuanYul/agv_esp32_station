@@ -71,7 +71,6 @@ static void wifi_tcp_read_task(void *pvParameters) {
         .sin_port           = htons(TCP_PORT),
         .sin_addr.s_addr    = htonl(INADDR_ANY),
     };
-
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         ESP_LOGE(TAG, "TCP bind failed: errno %d", errno);
         close(sock);
@@ -85,8 +84,6 @@ static void wifi_tcp_read_task(void *pvParameters) {
         return;
     }
     ESP_LOGI(TAG, "TCP listening on port %d", TCP_PORT);
-
-    // 2. 接受並處理每個 client
     while(1) {
         WifiPacket packet;
         if (!wifi_tcp_read(&packet, sock)) {
@@ -94,7 +91,6 @@ static void wifi_tcp_read_task(void *pvParameters) {
         }
         wifi_trcv_buffer_push(&wifi_tcp_receive_buffer, &packet);
     }
-
     close(sock);
     vTaskDelete(NULL);
 }
@@ -138,13 +134,11 @@ static void wifi_udp_read_task(void *pvParameters) {
         vTaskDelete(NULL);
         return;
     }
-
     struct sockaddr_in addr = {
         .sin_family         = AF_INET,
         .sin_port           = htons(UDP_PORT),
         .sin_addr.s_addr    = htonl(INADDR_ANY),
     };
-
     if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         ESP_LOGE(TAG, "Socket bind failed: errno %d", errno);
         close(sock);
@@ -152,7 +146,6 @@ static void wifi_udp_read_task(void *pvParameters) {
         return;
     }
     ESP_LOGI(TAG, "Socket bound, listening on port %d", UDP_PORT);
-
     while (1) {
         WifiPacket packet;
         if (!wifi_udp_read(&packet, sock)) {
@@ -160,7 +153,6 @@ static void wifi_udp_read_task(void *pvParameters) {
         }
         wifi_trcv_buffer_push(&wifi_udp_receive_buffer, &packet);
     }
-
     close(sock);
     vTaskDelete(NULL);
 }

@@ -2,6 +2,7 @@
 #define UART_ASYNC_H
 
 #include <stdbool.h>
+#include "uart_packet_mod.h"
 
 typedef struct {
     bool uart_transmit;

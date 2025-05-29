@@ -19,7 +19,7 @@ void uart_transmit_pkt_proc(void) {
     bool new_vec_wri_flag = false;
     if (new_vec_wri_flag) {
         UartPacket new_packet = uart_packet_new(&new_vec);
-        transceive_buffer_push(&transfer_buffer, &new_packet);
+        uart_trcv_buffer_push(&uart_transmit_buffer, &new_packet);
     };
 }
 
@@ -36,7 +36,7 @@ void uart_receive_pkt_proc(uint8_t count) {
     uint8_t i;
     for (i = 0; i < 5; i++){
         UartPacket packet;
-        if (!transceive_buffer_pop(&receive_buffer, &packet)) {
+        if (!uart_trcv_buffer_pop(&uart_receive_buffer, &packet)) {
             break;
         }
         VecU8 re_vec_u8 = uart_packet_get_data(&packet);
@@ -101,7 +101,7 @@ void uart_re_pkt_proc_data_store(VecU8 *vec_u8) {
     if (new_vec_wri_flag) {
         UartPacket new_packet = uart_packet_new(&new_vec);
         uart_packet_add_data(&new_packet, vec_u8);
-        transceive_buffer_push(&transfer_buffer, &new_packet);
+        uart_trcv_buffer_push(&uart_transmit_buffer, &new_packet);
     }
 }
 

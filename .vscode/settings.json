@@ -31,6 +31,8 @@
     "wifi_packet_proc_mod.h": "c",
     "esp_netif.h": "c",
     "uart.h": "c",
-    "freertosconfig.h": "c"
+    "freertosconfig.h": "c",
+    "uart_mod.h": "c",
+    "uart_packet_mod.h": "c"
   }
 }

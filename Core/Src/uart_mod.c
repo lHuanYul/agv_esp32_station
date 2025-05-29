@@ -1,11 +1,3 @@
-/* UART asynchronous example, that uses separate RX and TX tasks
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include "uart_mod.h"
 #include "prioritites_sequ.h"
 #include "freertos/FreeRTOS.h"
@@ -16,10 +8,12 @@
 #include "string.h"
 #include "driver/gpio.h"
 
-static const int RX_BUF_SIZE = 1024;
+static const int RX_BUF_SIZE = VECU8_MAX_CAPACITY;
 
 #define TXD_PIN (GPIO_NUM_4)
 #define RXD_PIN (GPIO_NUM_5)
+
+#define UART_READ_TIMEOUT_MS 10
 
 /**
  * @brief 傳輸/接收操作旗標
@@ -30,6 +24,8 @@ static const int RX_BUF_SIZE = 1024;
 TransceiveFlags transceive_flags = {0};
 
 void uart_init(void) {
+    // We won't use a buffer for sending data.
+    uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -38,41 +34,65 @@ void uart_init(void) {
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
-    // We won't use a buffer for sending data.
-    uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_1, &uart_config);
     uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
 
-int uart_write_t(const char* logName, const char* data) {
-    const int len = strlen(data);
-    const int txBytes = uart_write_bytes(UART_NUM_1, data, len);
-    ESP_LOGI(logName, "Wrote %d bytes", txBytes);
-    return txBytes;
+bool uart_write_t(const char* logName, UartPacket *packet) {
+    VecU8 vec_u8 = uart_packet_unpack(packet);
+    int len = uart_write_bytes(UART_NUM_1, vec_u8.data, vec_u8.length);
+    if (len <= 0) {
+        return 0;
+    }
+    ESP_LOGI(logName, "Wrote %d bytes", len);
+    return 1;
 }
 
 static void uart_write_task(void *arg) {
     static const char *TX_TASK_TAG = "TX_TASK";
     esp_log_level_set(TX_TASK_TAG, ESP_LOG_INFO);
     while (1) {
-        uart_write_t(TX_TASK_TAG, "Hello world");
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        UartPacket packet;
+        if (!uart_trcv_buffer_get_front(&uart_transmit_buffer, &packet)) {
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+            continue;
+        }
+        if (!uart_write_t(TX_TASK_TAG, &packet)) {
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+            continue;
+        }
+        uart_trcv_buffer_pop(&uart_transmit_buffer, NULL);
     }
+    vTaskDelete(NULL);
+}
+
+static bool uart_read_t(const char* logName, UartPacket *packet) {
+    uint8_t data[VECU8_MAX_CAPACITY] = {0};
+    int len = uart_read_bytes(UART_NUM_1, data, VECU8_MAX_CAPACITY, UART_READ_TIMEOUT_MS / portTICK_PERIOD_MS);
+    if (len <= 0) {
+        return 0;
+    }
+    ESP_LOGI(logName, "Read %d bytes: '%s'", len, data);
+    ESP_LOG_BUFFER_HEXDUMP(logName, data, len, ESP_LOG_INFO);
+    VecU8 vec_u8 = vec_u8_new();
+    vec_u8_push(&vec_u8, &data, len);
+    UartPacket new;
+    uart_packet_pack(&vec_u8, &new);
+    *packet = new;
+    return 1;
 }
 
 static void uart_read_task(void *arg) {
     static const char *RX_TASK_TAG = "RX_TASK";
     esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
-    uint8_t* data = (uint8_t*) malloc(RX_BUF_SIZE + 1);
     while (1) {
-        const int rxBytes = uart_read_bytes(UART_NUM_1, data, RX_BUF_SIZE, 1000 / portTICK_PERIOD_MS);
-        if (rxBytes > 0) {
-            data[rxBytes] = 0;
-            ESP_LOGI(RX_TASK_TAG, "Read %d bytes: '%s'", rxBytes, data);
-            ESP_LOG_BUFFER_HEXDUMP(RX_TASK_TAG, data, rxBytes, ESP_LOG_INFO);
+        UartPacket packet;
+        if (!uart_read_t(RX_TASK_TAG, &packet)) {
+            continue;
         }
+        uart_trcv_buffer_push(&uart_receive_buffer, &packet);
     }
-    free(data);
+    vTaskDelete(NULL);
 }
 
 void uart_main(void)
