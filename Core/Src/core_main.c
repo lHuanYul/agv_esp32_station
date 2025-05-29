@@ -13,9 +13,9 @@
 #include "lwip/sys.h"
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
-#include "wifi_connect.h"
-#include "wifi_transceive.h"
-#include "uart_async.h"
+#include "wifi_connect_mod.h"
+#include "wifi_transceive_mod.h"
+#include "uart_mod.h"
 
 static const char *TAG = "core main";
 
@@ -27,8 +27,8 @@ void core_main(void)
 
     while (1) {
         ESP_LOGI(TAG, "Running main loop...");
-        wifi_udp_transmit();
-        // wifi_tcp_transmit();
+        wifi_udp_write_task();
+        // wifi_tcp_write_task();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

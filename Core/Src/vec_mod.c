@@ -1,6 +1,11 @@
 #include "vec_mod.h"
 #include <string.h>
 
+VecU8 vec_u8_new(void) {
+    VecU8 new = {0};
+    return new;
+}
+
 void vec_u8_push(VecU8 *vec_u8, const void *src, uint16_t src_len) {
     if (vec_u8->length + src_len > VECU8_MAX_CAPACITY) {
         return;
@@ -9,8 +14,11 @@ void vec_u8_push(VecU8 *vec_u8, const void *src, uint16_t src_len) {
     vec_u8->length += src_len;
     return;
 }
+void vec_u8_push_u8(VecU8 *vec_u8, uint8_t value) {
+    vec_u8_push(vec_u8, &value, 1);
+}
 
-uint32_t swap32(uint32_t value) {
+static inline uint32_t swap32(uint32_t value) {
     return ((value & 0x000000FFU) << 24)
          | ((value & 0x0000FF00U) <<  8)
          | ((value & 0x00FF0000U) >>  8)
@@ -23,7 +31,7 @@ void vec_u8_push_float(VecU8 *vec_u8, float value) {
     vec_u8_push(vec_u8, &u32, sizeof(u32));
 }
 
-uint16_t swap16(const uint16_t value) {
+static inline uint16_t swap16(const uint16_t value) {
     return ((value & 0x00FFU) << 8)
          | ((value & 0xFF00U) >> 8);
 }
@@ -48,7 +56,7 @@ void vec_u8_rm_front(VecU8 *vec_u8, uint16_t size) {
 //     if (start > end || end > vec_u8->length) {
 //         return;
 //     }
-//     VecU8 new_vec = {0};
+//     VecU8 new_vec = vec_u8_new();
 //     if (start > 0) {
 //         vec_u8_push(&new_vec, vec_u8->data, start);
 //     }

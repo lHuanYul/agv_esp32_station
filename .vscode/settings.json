@@ -20,10 +20,15 @@
     "freertos.h": "c",
     "sockets.h": "c",
     "cstdlib": "c",
-    "wifi_transceive.h": "c",
+    "wifi_transceive_mod.h": "c",
     "string.h": "c",
-    "wifi_connect.h": "c",
+    "wifi_connect_mod.h": "c",
     "packet.h": "c",
-    "vec.h": "c"
+    "vec.h": "c",
+    "gpio.h": "c",
+    "wifi_packet_mod.h": "c",
+    "vec_mod.h": "c",
+    "wifi_packet_proc_mod.h": "c",
+    "esp_netif.h": "c"
   }
 }

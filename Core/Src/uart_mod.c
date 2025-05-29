@@ -6,6 +6,7 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
+#include "uart_mod.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -18,6 +19,14 @@ static const int RX_BUF_SIZE = 1024;
 
 #define TXD_PIN (GPIO_NUM_4)
 #define RXD_PIN (GPIO_NUM_5)
+
+/**
+ * @brief 傳輸/接收操作旗標
+ *        Transmit/receive operation flags
+ *
+ * @details 控制資料處理流程 (Control data processing flow)
+ */
+TransceiveFlags transceive_flags = {0};
 
 void uart_init(void)
 {
