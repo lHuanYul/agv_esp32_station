@@ -20,11 +20,11 @@ WifiTrcvBuf wifi_udp_receive_buffer = {0};
  * @param data 指向要封裝的原始資料向量 (input data vector)
  * @return WifiPacket 已封裝的 Wifi 封包 (packed Wifi packet)
  */
-WifiPacket wifi_packet_new(const ip4_addr_t ip, const VecU8 *data) {
+WifiPacket wifi_packet_new(const ip4_addr_t *ip, const VecU8 *vec_u8) {
     WifiPacket packet;
-    packet.ip = ip;
+    packet.ip = *ip;
     packet.data = vec_u8_new();
-    vec_u8_push(&packet.data, data->data, data->length);
+    vec_u8_push(&packet.data, vec_u8->data, vec_u8->length);
     return packet;
 }
 
@@ -54,31 +54,16 @@ void wifi_packet_add_data(WifiPacket *packet, const VecU8 *vec_u8) {
 }
 
 /**
- * @brief 根據原始資料向量打包成 Wifi 封包，並移除起始與結束碼後重新封裝
- *        Pack raw data vector into Wifi packet, stripping start and end codes before repacking
- *
- * @param vec_u8 包含封包起始碼與結束碼的資料向量 (input byte vector with start/end codes)
- * @param packet 輸出參數，接收封裝後的 Wifi 封包 (output packed Wifi packet)
- * @return bool 是否封包成功 (true if pack successful, false otherwise)
- */
-bool wifi_packet_pack(const VecU8 *vec_u8, ip4_addr_t ip, WifiPacket *packet) {
-    VecU8 data_vec = vec_u8_new();
-    vec_u8_push(&data_vec, vec_u8->data, vec_u8->length);
-    *packet = wifi_packet_new(ip, &data_vec);
-    return 1;
-}
-
-/**
  * @brief 解包 Wifi 封包，將起始碼、資料與結束碼合併為一個資料向量
  *        Unpack Wifi packet into a byte vector including start, data, and end codes
  *
  * @param packet 指向要解包的 Wifi 封包 (input packet)
  * @return VecU8 包含完整封包的資料向量 (vector containing full packet bytes)
  */
-VecU8 wifi_packet_unpack(const WifiPacket *packet) {
-    VecU8 vec_u8 = vec_u8_new();
-    vec_u8_push(&vec_u8, packet->data.data, packet->data.length);
-    return vec_u8;
+void wifi_packet_unpack(const WifiPacket *packet, ip4_addr_t *ip, VecU8 *vec_u8) {
+    *ip = packet->ip;
+    *vec_u8 = vec_u8_new();
+    vec_u8_push(vec_u8,packet->data.data,packet->data.length);
 }
 
 /**

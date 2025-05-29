@@ -7,6 +7,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 #include "uart_mod.h"
+#include "prioritites_sequ.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -28,8 +29,7 @@ static const int RX_BUF_SIZE = 1024;
  */
 TransceiveFlags transceive_flags = {0};
 
-void uart_init(void)
-{
+void uart_init(void) {
     const uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -44,26 +44,23 @@ void uart_init(void)
     uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 }
 
-int sendData(const char* logName, const char* data)
-{
+int uart_write_t(const char* logName, const char* data) {
     const int len = strlen(data);
     const int txBytes = uart_write_bytes(UART_NUM_1, data, len);
     ESP_LOGI(logName, "Wrote %d bytes", txBytes);
     return txBytes;
 }
 
-static void tx_task(void *arg)
-{
+static void uart_write_task(void *arg) {
     static const char *TX_TASK_TAG = "TX_TASK";
     esp_log_level_set(TX_TASK_TAG, ESP_LOG_INFO);
     while (1) {
-        sendData(TX_TASK_TAG, "Hello world");
+        uart_write_t(TX_TASK_TAG, "Hello world");
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 }
 
-static void rx_task(void *arg)
-{
+static void uart_read_task(void *arg) {
     static const char *RX_TASK_TAG = "RX_TASK";
     esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
     uint8_t* data = (uint8_t*) malloc(RX_BUF_SIZE + 1);
@@ -81,6 +78,6 @@ static void rx_task(void *arg)
 void uart_main(void)
 {
     uart_init();
-    xTaskCreate(rx_task, "uart_rx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 1, NULL);
-    xTaskCreate(tx_task, "uart_tx_task", 1024 * 2, NULL, configMAX_PRIORITIES - 2, NULL);
+    xTaskCreate(uart_read_task, "uart_rx_task", 1024 * 2, NULL, UART_READ_TASK_PRIO_SEQU, NULL);
+    xTaskCreate(uart_write_task, "uart_tx_task", 1024 * 2, NULL, UART_WRITE_TASK_PRIO_SEQU, NULL);
 }
