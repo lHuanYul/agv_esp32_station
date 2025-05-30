@@ -2,7 +2,6 @@
 #define UART_ASYNC_H
 
 #include <stdbool.h>
-#include "uart_packet_mod.h"
 
 typedef struct {
     bool uart_transmit;
@@ -13,6 +12,6 @@ typedef struct {
 } TransceiveFlags;
 extern TransceiveFlags transceive_flags;
 
-void uart_main(void);
+void uart_setup(void);
 
 #endif

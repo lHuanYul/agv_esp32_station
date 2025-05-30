@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include "vec_mod.h"
 
+void wifi_transceive_setup(void);
 void wifi_tcp_write_task(void);
 void wifi_udp_write_task(void);
-void wifi_transceive_setup(void);
 
 #endif

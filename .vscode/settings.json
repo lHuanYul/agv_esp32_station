@@ -33,6 +33,7 @@
     "uart.h": "c",
     "freertosconfig.h": "c",
     "uart_mod.h": "c",
-    "uart_packet_mod.h": "c"
+    "uart_packet_mod.h": "c",
+    "prioritites_sequ.h": "c"
   }
 }

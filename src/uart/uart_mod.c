@@ -1,4 +1,5 @@
-#include "uart_mod.h"
+#include "uart/uart_mod.h"
+#include "uart/uart_packet_mod.h"
 #include "prioritites_sequ.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -23,7 +24,9 @@ static const int RX_BUF_SIZE = VECU8_MAX_CAPACITY;
  */
 TransceiveFlags transceive_flags = {0};
 
-void uart_init(void) {
+static void uart_tasks_spawn(void);
+void uart_setup(void) {
+    uart_trcv_buf_init();
     // We won't use a buffer for sending data.
     uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     const uart_config_t uart_config = {
@@ -36,6 +39,7 @@ void uart_init(void) {
     };
     uart_param_config(UART_NUM_1, &uart_config);
     uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    uart_tasks_spawn();
 }
 
 bool uart_write_t(const char* logName, UartPacket *packet) {
@@ -53,22 +57,22 @@ static void uart_write_task(void *arg) {
     esp_log_level_set(TX_TASK_TAG, ESP_LOG_INFO);
     while (1) {
         UartPacket packet;
-        if (!uart_trcv_buffer_get_front(&uart_transmit_buffer, &packet)) {
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+        if (!uart_trsm_buf.get_front(&uart_trsm_buf, &packet)) {
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
         if (!uart_write_t(TX_TASK_TAG, &packet)) {
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
-        uart_trcv_buffer_pop(&uart_transmit_buffer, NULL);
+        uart_trsm_buf.pop(&uart_trsm_buf, NULL);
     }
     vTaskDelete(NULL);
 }
 
 static bool uart_read_t(const char* logName, UartPacket *packet) {
     uint8_t data[VECU8_MAX_CAPACITY] = {0};
-    int len = uart_read_bytes(UART_NUM_1, data, VECU8_MAX_CAPACITY, UART_READ_TIMEOUT_MS / portTICK_PERIOD_MS);
+    int len = uart_read_bytes(UART_NUM_1, data, VECU8_MAX_CAPACITY, pdMS_TO_TICKS(UART_READ_TIMEOUT_MS));
     if (len <= 0) {
         return 0;
     }
@@ -90,14 +94,12 @@ static void uart_read_task(void *arg) {
         if (!uart_read_t(RX_TASK_TAG, &packet)) {
             continue;
         }
-        uart_trcv_buffer_push(&uart_receive_buffer, &packet);
+        uart_recv_buf.push(&uart_recv_buf, &packet);
     }
     vTaskDelete(NULL);
 }
 
-void uart_main(void)
-{
-    uart_init();
-    xTaskCreate(uart_read_task, "uart_rx_task", 1024 * 2, NULL, UART_READ_TASK_PRIO_SEQU, NULL);
-    xTaskCreate(uart_write_task, "uart_tx_task", 1024 * 2, NULL, UART_WRITE_TASK_PRIO_SEQU, NULL);
+static void uart_tasks_spawn(void) {
+    xTaskCreate(uart_read_task, "uart_rx_task", 4096, NULL, UART_READ_TASK_PRIO_SEQU, NULL);
+    xTaskCreate(uart_write_task, "uart_tx_task", 4096, NULL, UART_WRITE_TASK_PRIO_SEQU, NULL);
 }

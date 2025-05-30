@@ -1,4 +1,6 @@
-#include "uart_packet_mod.h"
+#include "uart/uart_packet_mod.h"
+
+
 
 /**
  * @brief 生成一個新的 UART 封包，包含起始碼與結束碼
@@ -78,31 +80,6 @@ VecU8 uart_packet_unpack(const UartPacket *packet) {
 }
 
 /**
- * @brief 全域傳輸緩衝區
- *        Global transmit ring buffer
- */
-UartTrcvBuf uart_transmit_buffer = {0};
-
-/**
- * @brief 全域接收緩衝區
- *        Global receive ring buffer
- */
-UartTrcvBuf uart_receive_buffer = {0};
-
-/**
- * @brief 建立傳輸/接收環形緩衝區，初始化頭指標與計數
- *        Create a transmit/receive ring buffer, initialize head index and length
- *
- * @return UartTrcvBuf 初始化後的環形緩衝區 (initialized ring buffer)
- */
-UartTrcvBuf uart_trcv_buffer_new(void) {
-    UartTrcvBuf transceive_buffer;
-    transceive_buffer.head = 0;
-    transceive_buffer.length = 0;
-    return transceive_buffer;
-}
-
-/**
  * @brief 將封包推入環形緩衝區，若已滿則返回 false
  *        Push a packet into the ring buffer; return false if buffer is full
  *
@@ -110,7 +87,7 @@ UartTrcvBuf uart_trcv_buffer_new(void) {
  * @param packet 要推入緩衝區的 UART 封包 (input UART packet)
  * @return bool 是否推入成功 (true if push successful, false if buffer full)
  */
-bool uart_trcv_buffer_push(UartTrcvBuf *buffer, const UartPacket *packet) {
+static bool uart_trcv_buffer_push(UartTrcvBuf *buffer, const UartPacket *packet) {
     if (buffer->length >= UART_TRCV_BUF_CAP) return false;
     uint8_t tail = (buffer->head + buffer->length) % UART_TRCV_BUF_CAP;
     buffer->packet[tail] = *packet;
@@ -118,7 +95,7 @@ bool uart_trcv_buffer_push(UartTrcvBuf *buffer, const UartPacket *packet) {
     return true;
 }
 
-bool uart_trcv_buffer_get_front(UartTrcvBuf *buffer, UartPacket *packet) {
+static bool uart_trcv_buffer_get_front(UartTrcvBuf *buffer, UartPacket *packet) {
     if (buffer->length == 0) return 0;
     if (packet != NULL) *packet = buffer->packet[buffer->head];
     return 1;
@@ -132,7 +109,7 @@ bool uart_trcv_buffer_get_front(UartTrcvBuf *buffer, UartPacket *packet) {
  * @param packet 輸出參數，接收彈出的 UART 封包 (output popped UART packet)
  * @return bool 是否彈出成功 (true if pop successful, false if buffer empty)
  */
-bool uart_trcv_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet) {
+static bool uart_trcv_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet) {
     if (buffer->length == 0) return 0;
     if (packet != NULL) *packet = buffer->packet[buffer->head];
     if (--buffer->length == 0) {
@@ -141,4 +118,37 @@ bool uart_trcv_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet) {
         buffer->head = (buffer->head + 1) % UART_TRCV_BUF_CAP;
     }
     return 1;
+}
+
+/**
+ * @brief 建立傳輸/接收環形緩衝區，初始化頭指標與計數
+ *        Create a transmit/receive ring buffer, initialize head index and length
+ *
+ * @return UartTrcvBuf 初始化後的環形緩衝區 (initialized ring buffer)
+ */
+UartTrcvBuf uart_trcv_buffer_new(void) {
+    UartTrcvBuf buf = {0};
+    buf.head = 0;
+    buf.length = 0;
+    buf.push      = uart_trcv_buffer_push;
+    buf.get_front = uart_trcv_buffer_get_front;
+    buf.pop       = uart_trcv_buffer_pop;
+    return buf;
+}
+
+/**
+ * @brief 全域傳輸緩衝區
+ *        Global transmit ring buffer
+ */
+UartTrcvBuf uart_trsm_buf = {0};
+
+/**
+ * @brief 全域接收緩衝區
+ *        Global receive ring buffer
+ */
+UartTrcvBuf uart_recv_buf = {0};
+
+void uart_trcv_buf_init(void) {
+    uart_trsm_buf = uart_trcv_buffer_new();
+    uart_recv_buf  = uart_trcv_buffer_new();
 }

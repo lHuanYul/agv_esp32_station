@@ -26,9 +26,8 @@ extern WifiTrcvBuf wifi_udp_transmit_buffer;
 extern WifiTrcvBuf wifi_tcp_receive_buffer;
 extern WifiTrcvBuf wifi_udp_receive_buffer;
 WifiTrcvBuf wifi_trcv_buffer_new(void);
+bool wifi_trcv_buffer_get_front(WifiTrcvBuf *buffer, WifiPacket *packet);
 bool wifi_trcv_buffer_push(WifiTrcvBuf *buffer, const WifiPacket *packet);
 bool wifi_trcv_buffer_pop(WifiTrcvBuf *buffer, WifiPacket *packet);
-bool wifi_trcv_buffer_pop_firstHalf(const WifiTrcvBuf *buffer, WifiPacket *packet);
-bool wifi_trcv_buffer_pop_secondHalf(WifiTrcvBuf *buffer);
 
 #endif

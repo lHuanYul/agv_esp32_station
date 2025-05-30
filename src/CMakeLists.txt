@@ -1,8 +1,8 @@
-file(GLOB_RECURSE CORE_SRCS "Src/*.c" "Src/*.cpp")
+file(GLOB_RECURSE SRC_SRCS "./*.c")
 
 idf_component_register(
-    SRCS ${CORE_SRCS}
-    INCLUDE_DIRS "Inc"
+    SRCS ${SRC_SRCS}
+    INCLUDE_DIRS "../include"
     REQUIRES
         esp_wifi
         esp_netif

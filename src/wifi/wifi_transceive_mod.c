@@ -1,5 +1,5 @@
-#include "wifi_transceive_mod.h"
-#include "wifi_packet_proc_mod.h"
+#include "wifi/wifi_transceive_mod.h"
+#include "wifi/wifi_packet_proc_mod.h"
 #include "prioritites_sequ.h"
 #include "mcu_const.h"
 #include <errno.h>
@@ -18,6 +18,11 @@ static const char *TAG = "wifi trcv";
 
 // ip4_addr_t ip;
 // IP4_ADDR(&ip, 0, 0, 0, 0);
+
+static void wifi_tasks_spawn(void);
+void wifi_transceive_setup(void) {
+    wifi_tasks_spawn();
+}
 
 static bool wifi_tcp_read(WifiPacket *packet, int sock) {
     struct sockaddr_in client_addr;
@@ -260,7 +265,7 @@ void wifi_udp_write_task(void) {
     }
 }
 
-void wifi_transceive_setup(void) {
+static void wifi_tasks_spawn(void) {
     xTaskCreate(wifi_udp_read_task, "udp_server", 4096, NULL, WIFI_UDP_READ_TASK_PRIO_SEQU, NULL);
     xTaskCreate(wifi_tcp_read_task, "tcp_recv", 4096, NULL, WIFI_TCP_READ_TASK_PRIO_SEQU, NULL);
     // BaseType_t ret = 
