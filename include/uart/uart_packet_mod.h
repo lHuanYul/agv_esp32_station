@@ -40,8 +40,5 @@ extern UartTrcvBuf uart_trsm_buf;
 extern UartTrcvBuf uart_recv_buf;
 UartTrcvBuf uart_trcv_buffer_new(void);
 void uart_trcv_buf_init(void);
-// bool        uart_trcv_buffer_push(UartTrcvBuf *transceive_buffer, const UartPacket *packet);
-// bool        uart_trcv_buffer_get_front(UartTrcvBuf *buffer, UartPacket *packet);
-// bool        uart_trcv_buffer_pop(UartTrcvBuf *buffer, UartPacket *packet);
 
 #endif
