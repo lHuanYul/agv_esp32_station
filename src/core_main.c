@@ -13,8 +13,8 @@
 // #include "lwip/sys.h"
 // #include "lwip/sockets.h"
 // #include "lwip/netdb.h"
-#include "wifi/wifi_connect_mod.h"
-#include "wifi/wifi_transceive_mod.h"
+#include "wifi/connect.h"
+#include "wifi/tcp_transceive.h"
 #include "uart/transceive.h"
 #include "uart/packet.h"
 

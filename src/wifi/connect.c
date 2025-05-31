@@ -8,7 +8,7 @@
 #include "nvs_flash.h"
 #include "esp_netif.h"
 #include "lwip/sockets.h"
-#include "wifi/wifi_connect_mod.h"
+#include "wifi/connect.h"
 
 #define CONNECT_MAXIMUM_RETRY   5
 #define WIFI_CONNECTED_BIT      BIT0

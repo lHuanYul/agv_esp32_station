@@ -1,4 +1,4 @@
-#include "wifi/wifi_packet_mod.h"
+#include "wifi/packet.h"
 
 /**
  * @brief 全域傳輸緩衝區

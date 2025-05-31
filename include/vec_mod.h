@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define VECU8_MAX_CAPACITY  255
+#define VECU8_MAX_CAPACITY  256
 
 typedef struct VecU8 VecU8;
 typedef bool (*U8PushFn)        (      VecU8 *v_u8, const void     *src,  uint16_t src_len);

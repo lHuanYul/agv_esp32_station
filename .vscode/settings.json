@@ -33,7 +33,8 @@
     "uart.h": "c",
     "freertosconfig.h": "c",
     "transceive.h": "c",
-    "packet.h": "c",
-    "prioritites_sequ.h": "c"
+    "prioritites_sequ.h": "c",
+    "tcp_transceive.h": "c",
+    "udp_transceive.h": "c"
   }
 }
