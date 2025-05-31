@@ -47,3 +47,101 @@ C:/Users/HuanYu/Desktop/Codes/ESP32_D0WDQ6/agv_esp32_station/third_party/http_pa
     4 | #include "http_parser.h"
 C:/Users/HuanYu/Desktop/Codes/ESP32_D0WDQ6/agv_esp32_station/src/wifi/tcp_transceive.c:12:10: fatal error: http_parser/http_parser.h: No such file or directory
    12 | #include "http_parser/http_parser.h"
+
+
+curl -v -X POST http://192.168.0.11:60000/hello -H "Content-Type: application/json" -d '{"msg":"hello"}'
+
+
+static bool wifi_tcp_read(WifiPacket *packet, int sock) {
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_sock = accept(sock, (struct sockaddr *)&client_addr, &client_len);
+    if (client_sock < 0) {
+        ESP_LOGE(TAG, "TCP accept() failed: errno %d", errno);
+        return 0;
+    }
+    ESP_LOGI(TAG, "TCP connection from %s:%d", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    
+    char header_buf[BUFFER_SIZE];
+    int total_header_len = 0;
+    int header_end_index = -1;
+    VecU8 vec_u8 = vec_u8_new();
+    // uint8_t rx_buffer[1024];
+    // int len;
+    while (1) {
+        // if ((len = recv(client_sock, rx_buffer, sizeof(rx_buffer), 0)) <= 0) break;
+        // ESP_LOGI(TAG, "TCP Rx %d bytes → \n%s", len, (char *)rx_buffer);
+        // vec_u8.push(&vec_u8, rx_buffer, len);
+        int len = recv(client_sock,
+                       header_buf + total_header_len,
+                       BUFFER_SIZE - total_header_len,
+                       0);
+        if (len <= 0) {
+            // 連線被關、或 recv 失敗
+            close(client_sock);
+            ESP_LOGE(TAG, "recv error or connection closed prematurely");
+            return false;
+        }
+        total_header_len += len;
+        // 在目前的 header_buf 裡找 "\r\n\r\n"
+        char *pos = strstr(header_buf, "\r\n\r\n");
+        if (pos != NULL) {
+            header_end_index = (int)(pos - header_buf) + 4; // include "\r\n\r\n"
+            break;
+        }
+    }
+
+    int content_len = 0;
+    {
+        // 暫時把 header_buf 當成字串處理
+        header_buf[header_end_index] = '\0';
+        char *cl_key = "Content-Length:";
+        char *cl_pos = strcasestr(header_buf, cl_key);
+        if (cl_pos) {
+            // 往後跳過 "Content-Length:"
+            cl_pos += strlen(cl_key);
+            // 跳過空白
+            while (*cl_pos == ' ' || *cl_pos == '\t') {
+                cl_pos++;
+            }
+            content_len = atoi(cl_pos);
+        } else {
+            content_len = 0;
+        }
+    }
+    ESP_LOGI(TAG, "Parsed Content-Length = %d", content_len);
+    vec_u8.push(&vec_u8, (uint8_t *)header_buf, header_end_index);
+
+    int already_body = total_header_len - header_end_index;
+    if (already_body > 0) {
+        vec_u8.push(&vec_u8,
+                    (uint8_t *)(header_buf + header_end_index),
+                    already_body);
+    }
+
+    int remaining = content_len - already_body;
+    while (remaining > 0) {
+        uint8_t tmp_buf[BUFFER_SIZE];
+        int len2 = recv(client_sock, tmp_buf, MIN(remaining, BUFFER_SIZE), 0);
+        if (len2 <= 0) {
+            ESP_LOGE(TAG, "recv body failed: errno %d", errno);
+            close(client_sock);
+            return false;
+        }
+        vec_u8.push(&vec_u8, tmp_buf, len2);
+        remaining -= len2;
+    }
+
+    close(client_sock);
+    ESP_LOGI(TAG, "TCP client disconnected");
+    ESP_LOGI(TAG, "TCP client read complete, total body bytes = %d get\n%s", content_len, vec_u8.data);
+    // if (len < 0) {
+    //     ESP_LOGE(TAG, "TCP recv() failed: \n%s", vec_u8.data);
+    //     ESP_LOGE(TAG, "TCP recv() failed: errno %d", errno);
+    //     return 0;
+    // }
+    ip4_addr_t ip;
+    ip.addr = client_addr.sin_addr.s_addr;
+    *packet = wifi_packet_new(&ip, &vec_u8);
+    return 1;
+}

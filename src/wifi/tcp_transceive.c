@@ -24,6 +24,159 @@ void wifi_transceive_setup(void) {
     wifi_tasks_spawn();
 }
 
+typedef struct {
+    char *method_str;       // HTTP method (e.g., "GET", "POST")
+    char *url;              // Request URI (e.g., "/hello")
+    // 簡單把 header 存成陣列，實務上可能希望用 map 或 Hash table
+    struct {
+        char *field;        // header name
+        char *value;        // header value
+    } headers[16];          // 假設最多一筆 request 不超過 16 個 header
+    size_t num_headers;
+    char *body;             // Body (NULL if no body)
+    size_t body_len;
+} http_request_t;
+/* 為了在 callback 裡存取，先宣告全域（或 static）http_request_t 及暫存變數  */
+static http_request_t current_req;
+/* 暫存上一次解析到的 header field/value 片段 */
+static char *tmp_field    = NULL;
+static size_t tmp_f_len   = 0;
+static char *tmp_value    = NULL;
+static size_t tmp_v_len   = 0;
+
+// helper：把完整的一對 Header field+value 加入 current_req.headers[]
+static void add_header_entry() {
+    if (current_req.num_headers < 16) {
+        current_req.headers[current_req.num_headers].field = tmp_field;
+        current_req.headers[current_req.num_headers].value = tmp_value;
+        current_req.num_headers++;
+    } else {
+        // 若超過上限，可選擇忽略或 free tmp_field/tmp_value
+        free(tmp_field);
+        free(tmp_value);
+    }
+    tmp_field = NULL; tmp_f_len = 0;
+    tmp_value = NULL; tmp_v_len = 0;
+}
+
+// ---------- 2. callback 函式實作 ----------
+//   回呼幾乎都會傳來「片段」（slice），必須累積成完整字串才能使用
+
+// on_message_begin：每次收到新 request 時，會在最一開始呼叫
+static int on_message_begin_cb(http_parser *parser) {
+    // 先清空 current_req 裡面之前殘留的資料
+    if (current_req.url) { free(current_req.url); }
+    if (current_req.method_str) { free(current_req.method_str); }
+    for (size_t i = 0; i < current_req.num_headers; i++) {
+        free(current_req.headers[i].field);
+        free(current_req.headers[i].value);
+    }
+    if (current_req.body) { free(current_req.body); }
+
+    memset(&current_req, 0, sizeof(current_req));
+    tmp_field = NULL; tmp_f_len = 0;
+    tmp_value = NULL; tmp_v_len = 0;
+    return 0;  // 回傳 0 表示繼續解析
+}
+
+// on_url：解析到 URL 時被呼叫 (只對 HTTP_REQUEST 有意義)
+static int on_url_cb(http_parser *parser, const char *at, size_t length) {
+    if (current_req.url == NULL) {
+        current_req.url = (char *)malloc(length + 1);
+        memcpy(current_req.url, at, length);
+        current_req.url[length] = '\0';
+    } else {
+        size_t old_len = strlen(current_req.url);
+        current_req.url = (char *)realloc(current_req.url, old_len + length + 1);
+        memcpy(current_req.url + old_len, at, length);
+        current_req.url[old_len + length] = '\0';
+    }
+    return 0;
+}
+
+// on_header_field：解析到 Header 名稱時被呼叫
+static int on_header_field_cb(http_parser *parser, const char *at, size_t length) {
+    // 若上一次 tmp_value_len > 0，表示上一個 header field+value 已經完整，可以先存下
+    if (tmp_v_len > 0) {
+        add_header_entry();
+    }
+    // 開始累積新的 field 片段
+    if (tmp_field == NULL) {
+        tmp_field = (char *)malloc(length + 1);
+        memcpy(tmp_field, at, length);
+        tmp_field[length] = '\0';
+        tmp_f_len = length;
+    } else {
+        tmp_field = (char *)realloc(tmp_field, tmp_f_len + length + 1);
+        memcpy(tmp_field + tmp_f_len, at, length);
+        tmp_f_len += length;
+        tmp_field[tmp_f_len] = '\0';
+    }
+    return 0;
+}
+
+// on_header_value：解析到 Header 值時被呼叫
+static int on_header_value_cb(http_parser *parser, const char *at, size_t length) {
+    if (tmp_value == NULL) {
+        tmp_value = (char *)malloc(length + 1);
+        memcpy(tmp_value, at, length);
+        tmp_value[length] = '\0';
+        tmp_v_len = length;
+    } else {
+        tmp_value = (char *)realloc(tmp_value, tmp_v_len + length + 1);
+        memcpy(tmp_value + tmp_v_len, at, length);
+        tmp_v_len += length;
+        tmp_value[tmp_v_len] = '\0';
+    }
+    return 0;
+}
+
+// on_headers_complete：所有 header 解析完成時呼叫
+static int on_headers_complete_cb(http_parser *parser) {
+    // 如果最後一組 header field+value 還沒加入，就在此補上
+    if (tmp_f_len > 0 && tmp_v_len > 0) {
+        add_header_entry();
+    }
+    // 把 Method 存起來
+    const char *m = http_method_str(parser->method);
+    current_req.method_str = strdup(m);
+    // 若有 Content-Length，就先 allocate 一塊 body buffer
+    if (parser->content_length > 0) {
+        current_req.body = (char *)malloc(parser->content_length + 1);
+        current_req.body_len = 0;
+    }
+    return 0;
+}
+
+// on_body：讀到 body 片段時呼叫，多次呼叫直到 body 讀完
+static int on_body_cb(http_parser *parser, const char *at, size_t length) {
+    if (current_req.body) {
+        memcpy(current_req.body + current_req.body_len, at, length);
+        current_req.body_len += length;
+        current_req.body[current_req.body_len] = '\0';
+    }
+    return 0;
+}
+
+// on_message_complete：整筆 request（header + body）都讀完時呼叫
+static int on_message_complete_cb(http_parser *parser) {
+    // 到這裡代表 current_req 已經有完備的 method, url, headers[], body
+    ESP_LOGI(TAG, ">>> HTTP 解析完成 <<<");
+    ESP_LOGI(TAG, "Method: %s", current_req.method_str ? current_req.method_str : "(none)");
+    ESP_LOGI(TAG, "URL   : %s", current_req.url ? current_req.url : "(none)");
+    for (size_t i = 0; i < current_req.num_headers; i++) {
+        ESP_LOGI(TAG, "Header[%d]: %s = %s",
+                 (int)i,
+                 current_req.headers[i].field,
+                 current_req.headers[i].value);
+    }
+    if (current_req.body) {
+        ESP_LOGI(TAG, "Body (%d bytes): %s", (int)current_req.body_len, current_req.body);
+    }
+    ESP_LOGI(TAG, "=======================");
+    return 0;
+}
+
 #define BUFFER_SIZE 1024
 #ifndef MIN
   #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
@@ -34,60 +187,61 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
     int client_sock = accept(sock, (struct sockaddr *)&client_addr, &client_len);
     if (client_sock < 0) {
         ESP_LOGE(TAG, "TCP accept() failed: errno %d", errno);
-        return 0;
+        return false;
     }
     ESP_LOGI(TAG, "TCP connection from %s:%d", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-    
+
+    // 1. 先讀 header（直到 "\r\n\r\n"）
     char header_buf[BUFFER_SIZE];
-    int total_header_len = 0;
-    int header_end_index = -1;
-    VecU8 vec_u8 = vec_u8_new();
-    // uint8_t rx_buffer[1024];
-    // int len;
+    int total_header_len   = 0;
+    int header_end_index   = -1;
+    VecU8 vec_u8          = vec_u8_new();
+
     while (1) {
-        // if ((len = recv(client_sock, rx_buffer, sizeof(rx_buffer), 0)) <= 0) break;
-        // ESP_LOGI(TAG, "TCP Rx %d bytes → \n%s", len, (char *)rx_buffer);
-        // vec_u8.push(&vec_u8, rx_buffer, len);
         int len = recv(client_sock,
                        header_buf + total_header_len,
                        BUFFER_SIZE - total_header_len,
                        0);
         if (len <= 0) {
-            // 連線被關、或 recv 失敗
+            // 連線被關或 recv 失敗
             close(client_sock);
             ESP_LOGE(TAG, "recv error or connection closed prematurely");
             return false;
         }
         total_header_len += len;
-        // 在目前的 header_buf 裡找 "\r\n\r\n"
         char *pos = strstr(header_buf, "\r\n\r\n");
         if (pos != NULL) {
-            header_end_index = (int)(pos - header_buf) + 4; // include "\r\n\r\n"
+            header_end_index = (int)(pos - header_buf) + 4; // 包含 "\r\n\r\n"
             break;
+        }
+        // 如果 buffer 滿了但還沒找到 "\r\n\r\n"，可考量擴大 buffer 或回報錯誤
+        if (total_header_len >= BUFFER_SIZE) {
+            ESP_LOGE(TAG, "Header too large or missing CRLFCRLF");
+            close(client_sock);
+            return false;
         }
     }
 
+    // 2. 解析 Content-Length
     int content_len = 0;
     {
-        // 暫時把 header_buf 當成字串處理
         header_buf[header_end_index] = '\0';
         char *cl_key = "Content-Length:";
         char *cl_pos = strcasestr(header_buf, cl_key);
         if (cl_pos) {
-            // 往後跳過 "Content-Length:"
             cl_pos += strlen(cl_key);
-            // 跳過空白
-            while (*cl_pos == ' ' || *cl_pos == '\t') {
-                cl_pos++;
-            }
+            while (*cl_pos == ' ' || *cl_pos == '\t') { cl_pos++; }
             content_len = atoi(cl_pos);
         } else {
             content_len = 0;
         }
     }
     ESP_LOGI(TAG, "Parsed Content-Length = %d", content_len);
+
+    // 3. 把 header 部分先 push 到 vec_u8
     vec_u8.push(&vec_u8, (uint8_t *)header_buf, header_end_index);
 
+    // 4. 如果 header_buf 中已經含有部分 body，就也 push
     int already_body = total_header_len - header_end_index;
     if (already_body > 0) {
         vec_u8.push(&vec_u8,
@@ -95,6 +249,7 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
                     already_body);
     }
 
+    // 5. 若 body 還沒接收完，就持續 recv，直到讀滿 content_len 字節
     int remaining = content_len - already_body;
     while (remaining > 0) {
         uint8_t tmp_buf[BUFFER_SIZE];
@@ -110,16 +265,41 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
 
     close(client_sock);
     ESP_LOGI(TAG, "TCP client disconnected");
-    ESP_LOGI(TAG, "TCP client read complete, total body bytes = %d get\n%s", content_len, vec_u8.data);
-    // if (len < 0) {
-    //     ESP_LOGE(TAG, "TCP recv() failed: \n%s", vec_u8.data);
-    //     ESP_LOGE(TAG, "TCP recv() failed: errno %d", errno);
-    //     return 0;
-    // }
-    ip4_addr_t ip;
-    ip.addr = client_addr.sin_addr.s_addr;
-    *packet = wifi_packet_new(&ip, &vec_u8);
-    return 1;
+    ESP_LOGI(TAG, "Full HTTP packet read, total length = %d bytes", (int)vec_u8.len);
+
+    // -------- 6. 使用 http_parser- 解析剛剛收到的完整 raw bytes --------
+    {
+        // 6.1 初始化 parser & settings
+        http_parser parser;
+        http_parser_settings settings;
+        http_parser_init(&parser, HTTP_REQUEST);
+        memset(&settings, 0, sizeof(settings));
+
+        // 6.2 設定 callback
+        settings.on_message_begin    = on_message_begin_cb;
+        settings.on_url              = on_url_cb;
+        settings.on_header_field     = on_header_field_cb;
+        settings.on_header_value     = on_header_value_cb;
+        settings.on_headers_complete = on_headers_complete_cb;
+        settings.on_body             = on_body_cb;
+        settings.on_message_complete = on_message_complete_cb;
+
+        // 6.3 呼叫 execute()，把 vec_u8.data、vec_u8.len 全塞進去
+        size_t nparsed = http_parser_execute(&parser,
+                                             &settings,
+                                             (const char *)vec_u8.data,
+                                             vec_u8.len);
+        if (nparsed != vec_u8.len) {
+            enum http_errno err = HTTP_PARSER_ERRNO(&parser);
+            ESP_LOGE(TAG, "http_parser_execute error: %s (%s)",
+                     http_errno_description(err),
+                     http_errno_name(err));
+            // 可以選擇在此丟棄這筆 request 或做錯誤處理
+        }
+        // 到這裡，on_message_complete_cb 裡面的 ESP_LOGI 會印出解析後的內容
+    }
+
+    return true;
 }
 
 /**
