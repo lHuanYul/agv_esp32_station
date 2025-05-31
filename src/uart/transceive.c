@@ -1,5 +1,5 @@
-#include "uart/uart_mod.h"
-#include "uart/uart_packet_mod.h"
+#include "uart/transceive.h"
+#include "uart/packet.h"
 #include "prioritites_sequ.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -43,8 +43,8 @@ void uart_setup(void) {
 }
 
 bool uart_write_t(const char* logName, UartPacket *packet) {
-    VecU8 vec_u8 = uart_packet_unpack(packet);
-    int len = uart_write_bytes(UART_NUM_1, vec_u8.data, vec_u8.length);
+    VecU8 vec_u8 = packet->unpack(packet);
+    int len = uart_write_bytes(UART_NUM_1, vec_u8.data, vec_u8.len);
     if (len <= 0) {
         return 0;
     }
@@ -56,7 +56,7 @@ static void uart_write_task(void *arg) {
     static const char *TX_TASK_TAG = "TX_TASK";
     esp_log_level_set(TX_TASK_TAG, ESP_LOG_INFO);
     while (1) {
-        UartPacket packet;
+        UartPacket packet = uart_packet_new();
         if (!uart_trsm_buf.get_front(&uart_trsm_buf, &packet)) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
@@ -79,9 +79,9 @@ static bool uart_read_t(const char* logName, UartPacket *packet) {
     ESP_LOGI(logName, "Read %d bytes: '%s'", len, data);
     ESP_LOG_BUFFER_HEXDUMP(logName, data, len, ESP_LOG_INFO);
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8_push(&vec_u8, &data, len);
-    UartPacket new;
-    uart_packet_pack(&vec_u8, &new);
+    vec_u8.push(&vec_u8, &data, len);
+    UartPacket new = uart_packet_new();
+    new.pack(&new, &vec_u8);
     *packet = new;
     return 1;
 }
@@ -90,7 +90,7 @@ static void uart_read_task(void *arg) {
     static const char *RX_TASK_TAG = "RX_TASK";
     esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
     while (1) {
-        UartPacket packet;
+        UartPacket packet = uart_packet_new();
         if (!uart_read_t(RX_TASK_TAG, &packet)) {
             continue;
         }

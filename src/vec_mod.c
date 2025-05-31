@@ -1,21 +1,25 @@
 #include "vec_mod.h"
 #include <string.h>
 
-VecU8 vec_u8_new(void) {
-    VecU8 new = {0};
-    return new;
+static bool bytes_push(VecU8 *v_u8, const void *src, uint16_t src_len) {
+    if (v_u8->len + src_len > VECU8_MAX_CAPACITY) {
+        return 0;
+    }
+    memcpy(v_u8->data + v_u8->len, src, src_len);
+    v_u8->len += src_len;
+    return 1;
+}
+static inline bool bytes_push_byte(VecU8 *v_u8, uint8_t value) {
+    return bytes_push(v_u8, &value, 1);
 }
 
-void vec_u8_push(VecU8 *vec_u8, const void *src, uint16_t src_len) {
-    if (vec_u8->length + src_len > VECU8_MAX_CAPACITY) {
-        return;
-    }
-    memcpy(vec_u8->data + vec_u8->length, src, src_len);
-    vec_u8->length += src_len;
-    return;
+static inline uint16_t swap16(const uint16_t value) {
+    return ((value & 0x00FFU) << 8)
+         | ((value & 0xFF00U) >> 8);
 }
-void vec_u8_push_u8(VecU8 *vec_u8, uint8_t value) {
-    vec_u8_push(vec_u8, &value, 1);
+static bool bytes_push_u16(VecU8 *v_u8, uint16_t value) {
+    uint16_t u16 = swap16(value);
+    return bytes_push(v_u8, &u16, sizeof(u16));
 }
 
 static inline uint32_t swap32(uint32_t value) {
@@ -24,45 +28,34 @@ static inline uint32_t swap32(uint32_t value) {
          | ((value & 0x00FF0000U) >>  8)
          | ((value & 0xFF000000U) >> 24);
 }
-void vec_u8_push_float(VecU8 *vec_u8, float value) {
+static bool bytes_push_float(VecU8 *v_u8, float value) {
     uint32_t u32;
-    memcpy(&u32, &value, sizeof(u32));
+    uint8_t u32_len = sizeof(u32);
+    memcpy(&u32, &value, u32_len);
     u32 = swap32(u32);
-    vec_u8_push(vec_u8, &u32, sizeof(u32));
+    return bytes_push(v_u8, &u32, u32_len);
 }
 
-static inline uint16_t swap16(const uint16_t value) {
-    return ((value & 0x00FFU) << 8)
-         | ((value & 0xFF00U) >> 8);
-}
-void vec_u8_push_u16(VecU8 *vec_u8, uint16_t value) {
-    uint16_t u16 = swap16(value);
-    vec_u8_push(vec_u8, &u16, sizeof(u16));
-}
-
-bool vec_u8_starts_with(const VecU8 *src, const uint8_t *com, uint16_t com_len) {
-    if (src->length < com_len) {
+static bool bytes_starts_with(const VecU8 *v_u8, const uint8_t *com, uint16_t com_len) {
+    if (v_u8->len < com_len) {
         return false;
     }
-    return memcmp(src->data+src->head, com, com_len) == 0;
+    return memcmp(v_u8->data+v_u8->head, com, com_len) == 0;
 }
 
-void vec_u8_rm_front(VecU8 *vec_u8, uint16_t size) {
-    vec_u8->head += size;
-    vec_u8->length -= size;
+static bool bytes_rm_front(VecU8 *v_u8, uint16_t size) {
+    v_u8->head += size;
+    v_u8->len -= size;
+    return 1;
 }
 
-// void vec_u8_drain(VecU8 *vec_u8, uint16_t start, uint16_t end) {
-//     if (start > end || end > vec_u8->length) {
-//         return;
-//     }
-//     VecU8 new_vec = vec_u8_new();
-//     if (start > 0) {
-//         vec_u8_push(&new_vec, vec_u8->data, start);
-//     }
-//     uint16_t tail_len = vec_u8->length - end;
-//     if (tail_len > 0) {
-//         vec_u8_push(&new_vec, vec_u8->data + end, tail_len);
-//     }
-//     *vec_u8 = new_vec;
-// }
+VecU8 vec_u8_new(void) {
+    VecU8 vec = {0};
+    vec.push         = bytes_push;
+    vec.push_byte    = bytes_push_byte;
+    vec.push_u16     = bytes_push_u16;
+    vec.push_f32     = bytes_push_float;
+    vec.start_with   = bytes_starts_with;
+    vec.rm_front     = bytes_rm_front;
+    return vec;
+}

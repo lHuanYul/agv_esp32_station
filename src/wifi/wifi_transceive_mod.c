@@ -36,16 +36,16 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
                 inet_ntoa(client_addr.sin_addr),
                 ntohs(client_addr.sin_port));
     VecU8 vec_u8 = vec_u8_new();
-    uint8_t rx_buffer[VECU8_MAX_CAPACITY];
+    uint8_t rx_buffer[1024];
     int len;
-    // 3. 持續 recv 數據，直到對方關閉
     while ((len = recv(client_sock, rx_buffer, sizeof(rx_buffer), 0)) > 0) {
-        ESP_LOGI(TAG, "TCP Rx %d bytes → %s", len, (char *)rx_buffer);
-        vec_u8_push(&vec_u8, rx_buffer, len);
+        ESP_LOGI(TAG, "TCP Rx %d bytes → \n%s", len, (char *)rx_buffer);
+        vec_u8.push(&vec_u8, rx_buffer, len);
     }
     close(client_sock);
     ESP_LOGI(TAG, "TCP client disconnected");
     if (len < 0) {
+        ESP_LOGE(TAG, "TCP recv() failed: \n%s", vec_u8.data);
         ESP_LOGE(TAG, "TCP recv() failed: errno %d", errno);
         return 0;
     }
@@ -111,7 +111,7 @@ static bool wifi_udp_read(WifiPacket *packet, int sock) {
     ip4_addr_t ip;
     ip.addr = client_addr.sin_addr.s_addr;
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8_push(&vec_u8, rx_buffer, len);
+    vec_u8.push(&vec_u8, rx_buffer, len);
     *packet = wifi_packet_new(&ip, &vec_u8);
     ESP_LOGI(TAG, "Received %d bytes from %s:%d → %.*s",
         len,
@@ -192,7 +192,7 @@ static int wifi_tcp_write(const char *remote_ip, const uint16_t remote_port, con
     }
 
     // 發送資料
-    int ret = send(sock, vec_u8->data, vec_u8->length, 0);
+    int ret = send(sock, vec_u8->data, vec_u8->len, 0);
     if (ret < 0) {
         ESP_LOGE(TAG, "TCP send() failed: errno %d", errno);
         close(sock);
@@ -206,7 +206,7 @@ static int wifi_tcp_write(const char *remote_ip, const uint16_t remote_port, con
 
 void wifi_tcp_write_task(void) {
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8_push_const(&vec_u8, CMD_RIGHT_ADC_STORE);
+    vec_u8.push(&vec_u8, CMD_RIGHT_ADC_STORE, sizeof(CMD_RIGHT_ADC_STORE));
     int sent = wifi_tcp_write(TARGET_IP, TCP_PORT, &vec_u8);
     if (sent < 0) {
         ESP_LOGE(TAG, "TCP send failed: %d", sent);
@@ -237,7 +237,7 @@ static int wifi_udp_write(const char *remote_ip, const uint16_t remote_port, con
 
     // ESP_LOG_BUFFER_HEXDUMP(TAG, vec_u8->data, vec_u8->length, ESP_LOG_INFO);
     int ret = sendto(
-        sock, vec_u8->data, vec_u8->length, 0,
+        sock, vec_u8->data, vec_u8->len, 0,
         (struct sockaddr *)&addr,
         sizeof(addr)
     );
@@ -255,8 +255,8 @@ float f32_test = 1;
 uint16_t u16_test = 1;
 void wifi_udp_write_task(void) {
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8_push_const(&vec_u8, CMD_RIGHT_ADC_STORE);
-    vec_u8_push_u16(&vec_u8, u16_test);
+    vec_u8.push(&vec_u8, CMD_RIGHT_ADC_STORE, sizeof(CMD_RIGHT_ADC_STORE));
+    vec_u8.push_u16(&vec_u8, u16_test);
     u16_test++;
 
     int sent = wifi_udp_write(TARGET_IP, UDP_PORT, &vec_u8);

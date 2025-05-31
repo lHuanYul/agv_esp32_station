@@ -24,7 +24,7 @@ WifiPacket wifi_packet_new(const ip4_addr_t *ip, const VecU8 *vec_u8) {
     WifiPacket packet;
     packet.ip = *ip;
     packet.data = vec_u8_new();
-    vec_u8_push(&packet.data, vec_u8->data, vec_u8->length);
+    packet.data.push(&packet.data, vec_u8->data, vec_u8->len);
     return packet;
 }
 
@@ -38,7 +38,7 @@ WifiPacket wifi_packet_new(const ip4_addr_t *ip, const VecU8 *vec_u8) {
  */
 VecU8 wifi_packet_get_data(const WifiPacket *packet) {
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8_push(&vec_u8, packet->data.data, packet->data.length);
+    vec_u8.push(&vec_u8, packet->data.data, packet->data.len);
     return vec_u8;
 }
 
@@ -50,7 +50,7 @@ VecU8 wifi_packet_get_data(const WifiPacket *packet) {
  * @param vec_u8 要新增的資料向量 (input data vector)
  */
 void wifi_packet_add_data(WifiPacket *packet, const VecU8 *vec_u8) {
-    vec_u8_push(&packet->data, vec_u8->data, vec_u8->length);
+    packet->data.push(&packet->data, vec_u8->data, vec_u8->len);
 }
 
 /**
@@ -63,7 +63,7 @@ void wifi_packet_add_data(WifiPacket *packet, const VecU8 *vec_u8) {
 void wifi_packet_unpack(const WifiPacket *packet, ip4_addr_t *ip, VecU8 *vec_u8) {
     *ip = packet->ip;
     *vec_u8 = vec_u8_new();
-    vec_u8_push(vec_u8,packet->data.data,packet->data.length);
+    vec_u8->push(vec_u8, packet->data.data,packet->data.len);
 }
 
 /**

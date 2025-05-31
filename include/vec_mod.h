@@ -6,21 +6,25 @@
 
 #define VECU8_MAX_CAPACITY  255
 
-typedef struct {
-    uint8_t data[VECU8_MAX_CAPACITY];
-    uint16_t head;
-    uint16_t length;
+typedef struct VecU8 VecU8;
+typedef bool (*U8PushFn)        (      VecU8 *v_u8, const void     *src,  uint16_t src_len);
+typedef bool (*U8PushU8Fn)      (      VecU8 *v_u8,       uint8_t  value);
+typedef bool (*U8PushU16Fn)     (      VecU8 *v_u8,       uint16_t value);
+typedef bool (*U8PushFloatFn)   (      VecU8 *v_u8,       float    value);
+typedef bool (*U8StartWithFn)   (const VecU8 *v_u8, const uint8_t  *com,  uint16_t com_len);
+typedef bool (*U8RmFrontFn)     (      VecU8 *v_u8,       uint16_t size);
+typedef bool (*U8DrainFn)       (      VecU8 *v_u8,       uint16_t start, uint16_t end);
+typedef struct VecU8 {
+    uint8_t         data[VECU8_MAX_CAPACITY];
+    uint16_t        head;
+    uint16_t        len;
+    U8PushFn        push;
+    U8PushU8Fn      push_byte;
+    U8PushU16Fn     push_u16;
+    U8PushFloatFn   push_f32;
+    U8StartWithFn   start_with;
+    U8RmFrontFn     rm_front;
 } VecU8;
-
 VecU8 vec_u8_new(void);
-#define vec_u8_push_const(src, com) vec_u8_push((src), (com), sizeof(com))
-void vec_u8_push(VecU8 *vec_u8, const void *src, uint16_t src_len);
-void vec_u8_push_u8(VecU8 *vec_u8, uint8_t value);
-void vec_u8_push_float(VecU8 *vec_u8, float value);
-void vec_u8_push_u16(VecU8 *vec_u8, uint16_t value);
-#define vec_u8_starts_with_const(src, com) vec_u8_starts_with((src), (com), sizeof(com))
-bool vec_u8_starts_with(const VecU8 *src, const uint8_t *com, uint16_t com_len);
-void vec_u8_rm_front(VecU8 *vec_u8, uint16_t size);
-void vec_u8_drain(VecU8 *vec_u8, uint16_t start, uint16_t end);
 
 #endif
