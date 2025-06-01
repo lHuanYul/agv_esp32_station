@@ -62,7 +62,7 @@ void uart_receive_pkt_proc(uint8_t count) {
  */
 void uart_re_pkt_proc_data_store(VecU8 *vec_u8) {
     VecU8 new_vec = vec_u8_new();
-    new_vec.push(&new_vec, &(uint8_t){0x10}, 1);
+    new_vec.push(&new_vec, CMD_CODE_DATA_TRRE, sizeof(CMD_CODE_DATA_TRRE));
     bool data_proc_flag;
     bool new_vec_wri_flag = false;
     while (1) {

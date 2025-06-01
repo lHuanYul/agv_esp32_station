@@ -17,18 +17,16 @@
 #include "wifi/tcp_transceive.h"
 #include "uart/transceive.h"
 #include "uart/packet.h"
+#include "esp_http_server.h"
+#include "http/server.h"
 
 static const char *TAG = "core main";
 
 void core_main(void) {
     wifi_connect_setup();
-    wifi_transceive_setup();
-    uart_setup();
-
-    VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, "testing", 7);
-    UartPacket uart_packet = uart_packet_new();
-    uart_packet.add_data(&uart_packet, &vec_u8);
+    // wifi_transceive_setup();
+    // uart_setup();
+    httpd_handle_t server = http_start_webserver();
     while (1) {
         // ESP_LOGI(TAG, "Running main loop...");
         // uart_trcv_buffer_push(&uart_trsm_buf, &uart_packet);

@@ -150,6 +150,7 @@ static int on_headers_complete_cb(http_parser *parser) {
 
 // on_body：讀到 body 片段時呼叫，多次呼叫直到 body 讀完
 static int on_body_cb(http_parser *parser, const char *at, size_t length) {
+    ESP_LOGI(TAG, "on_body_cb called, segment length = %d", (int)length);
     if (current_req.body) {
         memcpy(current_req.body + current_req.body_len, at, length);
         current_req.body_len += length;
@@ -171,7 +172,7 @@ static int on_message_complete_cb(http_parser *parser) {
                  current_req.headers[i].value);
     }
     if (current_req.body) {
-        ESP_LOGI(TAG, "Body (%d bytes): %s", (int)current_req.body_len, current_req.body);
+        ESP_LOGI(TAG, "Body (%d bytes): %.*s", (int)current_req.body_len, (int)current_req.body_len, current_req.body);
     }
     ESP_LOGI(TAG, "=======================");
     return 0;
@@ -200,15 +201,22 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
     while (1) {
         int len = recv(client_sock,
                        header_buf + total_header_len,
-                       BUFFER_SIZE - total_header_len,
+                       20,
+                       // BUFFER_SIZE - total_header_len,
                        0);
-        if (len <= 0) {
-            // 連線被關或 recv 失敗
+        if (len < 0) {
+            // recv 出錯
+            ESP_LOGE(TAG, "recv() failed: errno %d", errno);
             close(client_sock);
-            ESP_LOGE(TAG, "recv error or connection closed prematurely");
+            return false;
+        } else if (len == 0) {
+            // 對端已經關閉連線（EOF）
+            ESP_LOGW(TAG, "Client closed connection before sending full header");
+            close(client_sock);
             return false;
         }
         total_header_len += len;
+        ESP_LOGI(TAG, "recv get \n%.*s", (int)total_header_len, header_buf);
         char *pos = strstr(header_buf, "\r\n\r\n");
         if (pos != NULL) {
             header_end_index = (int)(pos - header_buf) + 4; // 包含 "\r\n\r\n"
@@ -265,7 +273,7 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
 
     close(client_sock);
     ESP_LOGI(TAG, "TCP client disconnected");
-    ESP_LOGI(TAG, "Full HTTP packet read, total length = %d bytes", (int)vec_u8.len);
+    ESP_LOGI(TAG, "Body (%d bytes): %.*s", (int)current_req.body_len, (int)current_req.body_len, current_req.body);
 
     // -------- 6. 使用 http_parser- 解析剛剛收到的完整 raw bytes --------
     {

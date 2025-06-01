@@ -35,6 +35,12 @@
     "transceive.h": "c",
     "prioritites_sequ.h": "c",
     "tcp_transceive.h": "c",
-    "udp_transceive.h": "c"
+    "udp_transceive.h": "c",
+    "esp_http_server.h": "c",
+    "server.h": "c",
+    "base.h": "c",
+    "bitset": "c",
+    "string_view": "c",
+    "regex": "c"
   }
 }

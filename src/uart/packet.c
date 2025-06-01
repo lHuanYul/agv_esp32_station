@@ -4,23 +4,25 @@
  * @brief 向現有 UART 封包中新增資料
  *        Add data to existing UART packet
  *
- * @param pkt 指向要新增資料的 UART 封包 (input packet)
+ * @param self 指向要新增資料的 UART 封包 (input packet)
  * @param vec_u8 要新增的資料向量 (input data vector)
  */
-static void pkt_add_data(UartPacket *pkt, const VecU8 *vec_u8) {
-    pkt->data_vec_u8.push(&pkt->data_vec_u8, vec_u8->data, vec_u8->len);
+static void pkt_add_data(UartPacket *self, const VecU8 *vec_u8) {
+    self->data_vec_u8.push(&self->data_vec_u8, vec_u8->data, vec_u8->len);
 }
 
 /**
- * @brief 根據原始資料向量打包成 UART 封包，並移除起始與結束碼後重新封裝
- *        Pack raw data vector into UART packet, stripping start and end codes before repacking
+ * @brief 從 UART 封包中取出資料向量 (Extract payload data from UART packet)
  *
- * @param pkt 輸出參數，接收封裝後的 UART 封包 (output packed UART packet)
- * @return bool 是否封包成功 (true if pack successful, false otherwise)
+ * 從輸入的 UartPacket 取得其內部儲存的資料向量 (data_vec_u8)，
+ * 並回傳該 VecU8 實例。並不包含起始與結束碼 (start/end codes)。
+ *
+ * @param self  來源 UART 封包指標 (input UART packet pointer)
+ * @return     VecU8 由封包提取出的資料向量 (the data vector extracted from the packet)
  */
-static VecU8 pkt_get_data(const UartPacket *pkt) {
+static VecU8 pkt_get_data(const UartPacket *self) {
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, pkt->data_vec_u8.data, pkt->data_vec_u8.len);
+    vec_u8.push(&vec_u8, self->data_vec_u8.data, self->data_vec_u8.len);
     return vec_u8;
 }
 
@@ -28,20 +30,20 @@ static VecU8 pkt_get_data(const UartPacket *pkt) {
  * @brief 根據原始資料向量打包成 UART 封包，並移除起始與結束碼後重新封裝
  *        Pack raw data vector into UART packet, stripping start and end codes before repacking
  *
- * @param pkt 輸出參數，接收封裝後的 UART 封包 (output packed UART packet)
+ * @param self 輸出參數，接收封裝後的 UART 封包 (output packed UART packet)
  * @param vec_u8 包含封包起始碼與結束碼的資料向量 (input byte vector with start/end codes)
  * @return bool 是否封包成功 (true if pack successful, false otherwise)
  */
-static bool pkt_pack(UartPacket *pkt, const VecU8 *vec_u8) {
+static bool pkt_pack(UartPacket *self, const VecU8 *vec_u8) {
     if (
         (vec_u8->len < 2 || vec_u8->data[0] != PACKET_START_CODE) ||
         (vec_u8->data[vec_u8->len - 1] != PACKET_END_CODE)
     ) {
         return 0;
     }
-    VecU8 data_vec = vec_u8_new();
-    data_vec.push(&data_vec, vec_u8->data + 1, vec_u8->len - 2);
-    pkt->add_data(pkt, &data_vec);
+    VecU8 vec = vec_u8_new();
+    vec.push(&vec, vec_u8->data + 1, vec_u8->len - 2);
+    self->add_data(self, &vec);
     return 1;
 }
 
@@ -49,15 +51,15 @@ static bool pkt_pack(UartPacket *pkt, const VecU8 *vec_u8) {
  * @brief 解包 UART 封包，將起始碼、資料與結束碼合併為一個資料向量
  *        Unpack UART packet into a byte vector including start, data, and end codes
  *
- * @param pkt 指向要解包的 UART 封包 (input packet)
+ * @param self 指向要解包的 UART 封包 (input packet)
  * @return VecU8 包含完整封包的資料向量 (vector containing full packet bytes)
  */
-static VecU8 pkt_unpack(const UartPacket *pkt) {
-    VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, &pkt->start, 1);
-    vec_u8.push(&vec_u8, pkt->data_vec_u8.data, pkt->data_vec_u8.len);
-    vec_u8.push(&vec_u8, &pkt->end, 1);
-    return vec_u8;
+static VecU8 pkt_unpack(const UartPacket *self) {
+    VecU8 vec = vec_u8_new();
+    vec.push(&vec, &self->start, 1);
+    vec.push(&vec, self->data_vec_u8.data, self->data_vec_u8.len);
+    vec.push(&vec, &self->end, 1);
+    return vec;
 }
 
 /**
@@ -84,21 +86,21 @@ UartPacket uart_packet_new(void) {
  * @brief 將封包推入環形緩衝區，若已滿則返回 false
  *        Push a packet into the ring buffer; return false if buffer is full
  *
- * @param buf 指向環形緩衝區的指標 (input/output ring buffer)
+ * @param self 指向環形緩衝區的指標 (input/output ring buffer)
  * @param pkt 要推入緩衝區的 UART 封包 (input UART packet)
  * @return bool 是否推入成功 (true if push successful, false if buffer full)
  */
-static bool trcv_buffer_push(UartTrcvBuf *buf, const UartPacket *pkt) {
-    if (buf->length >= UART_TRCV_BUF_CAP) return false;
-    uint8_t tail = (buf->head + buf->length) % UART_TRCV_BUF_CAP;
-    buf->packet[tail] = *pkt;
-    buf->length++;
+static bool trcv_buffer_push(UartTrcvBuf *self, const UartPacket *pkt) {
+    if (self->length >= UART_TRCV_BUF_CAP) return false;
+    uint8_t tail = (self->head + self->length) % UART_TRCV_BUF_CAP;
+    self->packet[tail] = *pkt;
+    self->length++;
     return true;
 }
 
-static bool trcv_buffer_get_front(const UartTrcvBuf *buf, UartPacket *pkt) {
-    if (buf->length == 0) return 0;
-    if (pkt != NULL) *pkt = buf->packet[buf->head];
+static bool trcv_buffer_get_front(const UartTrcvBuf *self, UartPacket *pkt) {
+    if (self->length == 0) return 0;
+    if (self != NULL) *pkt = self->packet[self->head];
     return 1;
 }
 
@@ -106,17 +108,17 @@ static bool trcv_buffer_get_front(const UartTrcvBuf *buf, UartPacket *pkt) {
  * @brief 從環形緩衝區彈出一個封包資料
  *        Pop a packet from the ring buffer
  *
- * @param buf 指向環形緩衝區的指標 (input/output ring buffer)
+ * @param self 指向環形緩衝區的指標 (input/output ring buffer)
  * @param pkt 輸出參數，接收彈出的 UART 封包 (output popped UART packet)
  * @return bool 是否彈出成功 (true if pop successful, false if buffer empty)
  */
-static bool trcv_buffer_pop(UartTrcvBuf *buf, UartPacket *pkt) {
-    if (buf->length == 0) return 0;
-    if (pkt != NULL) *pkt = buf->packet[buf->head];
-    if (--buf->length == 0) {
-        buf->head = 0;
+static bool trcv_buffer_pop(UartTrcvBuf *self, UartPacket *pkt) {
+    if (self->length == 0) return 0;
+    if (self != NULL) *pkt = self->packet[self->head];
+    if (--self->length == 0) {
+        self->head = 0;
     } else {
-        buf->head = (buf->head + 1) % UART_TRCV_BUF_CAP;
+        self->head = (self->head + 1) % UART_TRCV_BUF_CAP;
     }
     return 1;
 }
