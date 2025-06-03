@@ -27,7 +27,6 @@ TransceiveFlags transceive_flags = {0};
 static void uart_tasks_spawn(void);
 void uart_setup(void) {
     uart_trcv_buf_init();
-    // We won't use a buffer for sending data.
     uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     const uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -43,7 +42,8 @@ void uart_setup(void) {
 }
 
 bool uart_write_t(const char* logName, UartPacket *packet) {
-    VecU8 vec_u8 = packet->unpack(packet);
+    VecU8 vec_u8 = vec_u8_new();
+    uart_pkt_unpack(packet, &vec_u8);
     int len = uart_write_bytes(UART_NUM_1, vec_u8.data, vec_u8.len);
     if (len <= 0) {
         return 0;
@@ -55,9 +55,10 @@ bool uart_write_t(const char* logName, UartPacket *packet) {
 static void uart_write_task(void *arg) {
     static const char *TX_TASK_TAG = "TX_TASK";
     esp_log_level_set(TX_TASK_TAG, ESP_LOG_INFO);
+
     while (1) {
         UartPacket packet = uart_packet_new();
-        if (!uart_trsm_buf.get_front(&uart_trsm_buf, &packet)) {
+        if (!uart_trcv_buf_get_front(&uart_trsm_pkt_buf, &packet)) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
@@ -65,8 +66,9 @@ static void uart_write_task(void *arg) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
-        uart_trsm_buf.pop(&uart_trsm_buf, NULL);
+        uart_trcv_buf_pop_front(&uart_trsm_pkt_buf, NULL);
     }
+    
     vTaskDelete(NULL);
 }
 
@@ -79,9 +81,11 @@ static bool uart_read_t(const char* logName, UartPacket *packet) {
     ESP_LOGI(logName, "Read %d bytes: '%s'", len, data);
     ESP_LOG_BUFFER_HEXDUMP(logName, data, len, ESP_LOG_INFO);
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, &data, len);
+    vec_u8_push(&vec_u8, &data, len);
     UartPacket new = uart_packet_new();
-    new.pack(&new, &vec_u8);
+    if (uart_pkt_pack(&new, &vec_u8)) {
+        ESP_LOGI(logName, "Pack %d bytes", len);
+    }
     *packet = new;
     return 1;
 }
@@ -89,13 +93,17 @@ static bool uart_read_t(const char* logName, UartPacket *packet) {
 static void uart_read_task(void *arg) {
     static const char *RX_TASK_TAG = "RX_TASK";
     esp_log_level_set(RX_TASK_TAG, ESP_LOG_INFO);
+    ESP_LOGI(RX_TASK_TAG, "Uart read task start");
+
     while (1) {
         UartPacket packet = uart_packet_new();
         if (!uart_read_t(RX_TASK_TAG, &packet)) {
             continue;
         }
-        uart_recv_buf.push(&uart_recv_buf, &packet);
+        uart_trcv_buf_push(&uart_recv_pkt_buf, &packet);
+        ESP_LOGI(RX_TASK_TAG, "Buf len: %d", uart_recv_pkt_buf.len);
     }
+
     vTaskDelete(NULL);
 }
 

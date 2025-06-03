@@ -247,12 +247,12 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
     ESP_LOGI(TAG, "Parsed Content-Length = %d", content_len);
 
     // 3. 把 header 部分先 push 到 vec_u8
-    vec_u8.push(&vec_u8, (uint8_t *)header_buf, header_end_index);
+    vec_u8_push(&vec_u8, (uint8_t *)header_buf, header_end_index);
 
     // 4. 如果 header_buf 中已經含有部分 body，就也 push
     int already_body = total_header_len - header_end_index;
     if (already_body > 0) {
-        vec_u8.push(&vec_u8,
+        vec_u8_push(&vec_u8,
                     (uint8_t *)(header_buf + header_end_index),
                     already_body);
     }
@@ -267,7 +267,7 @@ static bool wifi_tcp_read(WifiPacket *packet, int sock) {
             close(client_sock);
             return false;
         }
-        vec_u8.push(&vec_u8, tmp_buf, len2);
+        vec_u8_push(&vec_u8, tmp_buf, len2);
         remaining -= len2;
     }
 
@@ -399,7 +399,7 @@ static int wifi_tcp_write(const char *remote_ip, const uint16_t remote_port, con
 
 void wifi_tcp_write_task(void) {
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, CMD_RIGHT_ADC_STORE, sizeof(CMD_RIGHT_ADC_STORE));
+    vec_u8_push(&vec_u8, CMD_RIGHT_ADC_STORE, sizeof(CMD_RIGHT_ADC_STORE));
     int sent = wifi_tcp_write(TARGET_IP, TCP_PORT, &vec_u8);
     if (sent < 0) {
         ESP_LOGE(TAG, "TCP send failed: %d", sent);

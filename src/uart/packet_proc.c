@@ -15,12 +15,12 @@ uint16_t u16_test = 1;
  */
 void uart_transmit_pkt_proc(void) {
     VecU8 new_vec = vec_u8_new();
-    new_vec.push(&new_vec, &(uint8_t){0x10}, 1);
+    vec_u8_push(&new_vec, &(uint8_t){0x10}, 1);
     bool new_vec_wri_flag = false;
     if (new_vec_wri_flag) {
         UartPacket new_packet = uart_packet_new();
-        new_packet.add_data(&new_packet, &new_vec);
-        uart_trsm_buf.push(&uart_trsm_buf, &new_packet);
+        uart_pkt_add_data(&new_packet, &new_vec);
+        uart_trcv_buf_push(&uart_trsm_pkt_buf, &new_packet);
     };
 }
 
@@ -37,15 +37,16 @@ void uart_receive_pkt_proc(uint8_t count) {
     uint8_t i;
     for (i = 0; i < 5; i++){
         UartPacket packet = uart_packet_new();
-        if (!uart_recv_buf.pop(&uart_recv_buf, &packet)) {
+        if (!uart_trcv_buf_pop_front(&uart_recv_pkt_buf, &packet)) {
             break;
         }
-        VecU8 re_vec_u8 = packet.get_data(&packet);
-        uint8_t code = re_vec_u8.data[0];
-        re_vec_u8.rm_front(&re_vec_u8, 1);
+        VecU8 vec_u8 = vec_u8_new();
+        uart_pkt_get_data(&packet, &vec_u8);
+        uint8_t code = vec_u8.data[0];
+        vec_u8_rm_range(&vec_u8, 0, 1);
         switch (code) {
             case CMD_CODE_DATA_TRRE:
-                uart_re_pkt_proc_data_store(&re_vec_u8);
+                uart_re_pkt_proc_data_store(&vec_u8);
                 break;
             default:
                 break;
@@ -62,38 +63,38 @@ void uart_receive_pkt_proc(uint8_t count) {
  */
 void uart_re_pkt_proc_data_store(VecU8 *vec_u8) {
     VecU8 new_vec = vec_u8_new();
-    new_vec.push(&new_vec, CMD_CODE_DATA_TRRE, sizeof(CMD_CODE_DATA_TRRE));
+    vec_u8_push_byte(&new_vec, CMD_CODE_DATA_TRRE);
     bool data_proc_flag;
     bool new_vec_wri_flag = false;
     while (1) {
         data_proc_flag = false;
-        if (vec_u8->start_with(vec_u8, CMD_RIGHT_SPEED_STOP, sizeof(CMD_RIGHT_SPEED_STOP))) {
-            vec_u8->rm_front(vec_u8, sizeof(CMD_RIGHT_SPEED_STOP));
+        if (vec_u8_starts_with(vec_u8, CMD_RIGHT_SPEED_STOP, sizeof(CMD_RIGHT_SPEED_STOP))) {
+            vec_u8_rm_range(vec_u8, 0, sizeof(CMD_RIGHT_SPEED_STOP));
             data_proc_flag = true;
             transceive_flags.right_speed = false;
         }
-        if (vec_u8->start_with(vec_u8, CMD_RIGHT_SPEED_ONCE, sizeof(CMD_RIGHT_SPEED_ONCE))) {
-            vec_u8->rm_front(vec_u8, sizeof(CMD_RIGHT_SPEED_ONCE));
+        if (vec_u8_starts_with(vec_u8, CMD_RIGHT_SPEED_ONCE, sizeof(CMD_RIGHT_SPEED_ONCE))) {
+            vec_u8_rm_range(vec_u8, 0, sizeof(CMD_RIGHT_SPEED_ONCE));
             data_proc_flag = true;
             new_vec_wri_flag = true;
         }
-        if (vec_u8->start_with(vec_u8, CMD_RIGHT_SPEED_START, sizeof(CMD_RIGHT_SPEED_START))) {
-            vec_u8->rm_front(vec_u8, sizeof(CMD_RIGHT_SPEED_START));
+        if (vec_u8_starts_with(vec_u8, CMD_RIGHT_SPEED_START, sizeof(CMD_RIGHT_SPEED_START))) {
+            vec_u8_rm_range(vec_u8, 0, sizeof(CMD_RIGHT_SPEED_START));
             data_proc_flag = true;
             transceive_flags.right_speed = true;
         }
-        if (vec_u8->start_with(vec_u8, CMD_RIGHT_ADC_STOP, sizeof(CMD_RIGHT_ADC_STOP))) {
-            vec_u8->rm_front(vec_u8, sizeof(CMD_RIGHT_ADC_STOP));
+        if (vec_u8_starts_with(vec_u8, CMD_RIGHT_ADC_STOP, sizeof(CMD_RIGHT_ADC_STOP))) {
+            vec_u8_rm_range(vec_u8, 0, sizeof(CMD_RIGHT_ADC_STOP));
             data_proc_flag = true;
             transceive_flags.right_adc = false;
         }
-        if (vec_u8->start_with(vec_u8, CMD_RIGHT_ADC_ONCE, sizeof(CMD_RIGHT_ADC_ONCE))) {
-            vec_u8->rm_front(vec_u8, sizeof(CMD_RIGHT_ADC_ONCE));
+        if (vec_u8_starts_with(vec_u8, CMD_RIGHT_ADC_ONCE, sizeof(CMD_RIGHT_ADC_ONCE))) {
+            vec_u8_rm_range(vec_u8, 0, sizeof(CMD_RIGHT_ADC_ONCE));
             data_proc_flag = true;
             new_vec_wri_flag = true;
         }
-        if (vec_u8->start_with(vec_u8, CMD_RIGHT_ADC_START, sizeof(CMD_RIGHT_ADC_START))) {
-            vec_u8->rm_front(vec_u8, sizeof(CMD_RIGHT_ADC_START));
+        if (vec_u8_starts_with(vec_u8, CMD_RIGHT_ADC_START, sizeof(CMD_RIGHT_ADC_START))) {
+            vec_u8_rm_range(vec_u8, 0, sizeof(CMD_RIGHT_ADC_START));
             data_proc_flag = true;
             transceive_flags.right_adc = true;
         }
@@ -101,17 +102,7 @@ void uart_re_pkt_proc_data_store(VecU8 *vec_u8) {
     }
     if (new_vec_wri_flag) {
         UartPacket new_packet = uart_packet_new();
-        new_packet.add_data(&new_packet, &new_vec);
-        uart_trsm_buf.push(&uart_trsm_buf, &new_packet);
+        uart_pkt_add_data(&new_packet, &new_vec);
+        uart_trcv_buf_push(&uart_trsm_pkt_buf, &new_packet);
     }
-}
-
-/**
- * @brief 填充狀態至資料向量
- *        Populate status into byte vector
- *
- * @param vec_u8 指向要寫入資料的 VecU8 (input/output vector to receive motor data)
- * @return void
- */
-void transmit_buf_set(VecU8* vec_u8) {
 }

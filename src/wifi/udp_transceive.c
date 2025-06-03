@@ -26,7 +26,7 @@ static bool wifi_udp_read(WifiPacket *packet, int sock) {
     ip4_addr_t ip;
     ip.addr = client_addr.sin_addr.s_addr;
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, rx_buffer, len);
+    vec_u8_push(&vec_u8, rx_buffer, len);
     *packet = wifi_packet_new(&ip, &vec_u8);
     ESP_LOGI(TAG, "Received %d bytes from %s:%d → %.*s",
         len,
@@ -118,8 +118,8 @@ float f32_test = 1;
 uint16_t u16_test = 1;
 void wifi_udp_write_task(void) {
     VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, CMD_RIGHT_ADC_STORE, sizeof(CMD_RIGHT_ADC_STORE));
-    vec_u8.push_u16(&vec_u8, u16_test);
+    vec_u8_push(&vec_u8, CMD_RIGHT_ADC_STORE, sizeof(CMD_RIGHT_ADC_STORE));
+    vec_u8_push_u16(&vec_u8, u16_test);
     u16_test++;
 
     int sent = wifi_udp_write(TARGET_IP, UDP_PORT, &vec_u8);

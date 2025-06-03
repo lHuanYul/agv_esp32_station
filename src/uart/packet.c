@@ -1,5 +1,7 @@
 #include "uart/packet.h"
 
+// ----------------------------------------------------------------------------------------------------
+
 /**
  * @brief 向現有 UART 封包中新增資料
  *        Add data to existing UART packet
@@ -7,23 +9,24 @@
  * @param self 指向要新增資料的 UART 封包 (input packet)
  * @param vec_u8 要新增的資料向量 (input data vector)
  */
-static void pkt_add_data(UartPacket *self, const VecU8 *vec_u8) {
-    self->data_vec_u8.push(&self->data_vec_u8, vec_u8->data, vec_u8->len);
+bool uart_pkt_add_data(UartPacket *self, VecU8 *vec_u8) {
+    vec_u8_realign(vec_u8);
+    return vec_u8_push(&self->datas, vec_u8->data, vec_u8->len);
 }
 
 /**
  * @brief 從 UART 封包中取出資料向量 (Extract payload data from UART packet)
  *
- * 從輸入的 UartPacket 取得其內部儲存的資料向量 (data_vec_u8)，
+ * 從輸入的 UartPacket 取得其內部儲存的資料向量 (datas)，
  * 並回傳該 VecU8 實例。並不包含起始與結束碼 (start/end codes)。
  *
  * @param self  來源 UART 封包指標 (input UART packet pointer)
  * @return     VecU8 由封包提取出的資料向量 (the data vector extracted from the packet)
  */
-static VecU8 pkt_get_data(const UartPacket *self) {
-    VecU8 vec_u8 = vec_u8_new();
-    vec_u8.push(&vec_u8, self->data_vec_u8.data, self->data_vec_u8.len);
-    return vec_u8;
+bool uart_pkt_get_data(const UartPacket *self, VecU8 *vec_u8) {
+    vec_u8_rm_range(vec_u8, 0, VECU8_MAX_CAPACITY);
+    vec_u8_push(vec_u8, self->datas.data, self->datas.len);
+    return 1;
 }
 
 /**
@@ -34,16 +37,16 @@ static VecU8 pkt_get_data(const UartPacket *self) {
  * @param vec_u8 包含封包起始碼與結束碼的資料向量 (input byte vector with start/end codes)
  * @return bool 是否封包成功 (true if pack successful, false otherwise)
  */
-static bool pkt_pack(UartPacket *self, const VecU8 *vec_u8) {
-    if (
-        (vec_u8->len < 2 || vec_u8->data[0] != PACKET_START_CODE) ||
-        (vec_u8->data[vec_u8->len - 1] != PACKET_END_CODE)
-    ) {
-        return 0;
-    }
-    VecU8 vec = vec_u8_new();
-    vec.push(&vec, vec_u8->data + 1, vec_u8->len - 2);
-    self->add_data(self, &vec);
+bool uart_pkt_pack(UartPacket *self, VecU8 *vec_u8) {
+    uint8_t byte;
+    if (!vec_u8_get_byte(vec_u8, &byte, 0)) return 0;
+    if (byte != PACKET_START_CODE) return 0;
+    if (!vec_u8_get_byte(vec_u8, &byte, vec_u8->len - 1)) return 0;
+    if (byte != PACKET_END_CODE) return 0;
+    vec_u8_rm_range(vec_u8, 0, 1);
+    vec_u8_rm_range(vec_u8, vec_u8->len-1, 1);
+    vec_u8_realign(vec_u8);
+    self->datas = *vec_u8;
     return 1;
 }
 
@@ -54,12 +57,12 @@ static bool pkt_pack(UartPacket *self, const VecU8 *vec_u8) {
  * @param self 指向要解包的 UART 封包 (input packet)
  * @return VecU8 包含完整封包的資料向量 (vector containing full packet bytes)
  */
-static VecU8 pkt_unpack(const UartPacket *self) {
-    VecU8 vec = vec_u8_new();
-    vec.push(&vec, &self->start, 1);
-    vec.push(&vec, self->data_vec_u8.data, self->data_vec_u8.len);
-    vec.push(&vec, &self->end, 1);
-    return vec;
+bool uart_pkt_unpack(const UartPacket *self, VecU8 *vec_u8) {
+    vec_u8_rm_range(vec_u8, 0, VECU8_MAX_CAPACITY);
+    vec_u8_push_byte(vec_u8, self->start);
+    vec_u8_push(vec_u8, self->datas.data, self->datas.len);
+    vec_u8_push_byte(vec_u8, self->end);
+    return 1;
 }
 
 /**
@@ -70,13 +73,8 @@ static VecU8 pkt_unpack(const UartPacket *self) {
  */
 UartPacket uart_packet_new(void) {
     UartPacket pkt = {0};
-    pkt.start        = PACKET_START_CODE;
-    pkt.data_vec_u8  = vec_u8_new();
-    pkt.end          = PACKET_END_CODE;
-    pkt.add_data     = pkt_add_data;
-    pkt.get_data     = pkt_get_data;
-    pkt.pack         = pkt_pack;
-    pkt.unpack       = pkt_unpack;
+    pkt.start       = PACKET_START_CODE;
+    pkt.end         = PACKET_END_CODE;
     return pkt;
 }
 
@@ -90,17 +88,17 @@ UartPacket uart_packet_new(void) {
  * @param pkt 要推入緩衝區的 UART 封包 (input UART packet)
  * @return bool 是否推入成功 (true if push successful, false if buffer full)
  */
-static bool trcv_buffer_push(UartTrcvBuf *self, const UartPacket *pkt) {
-    if (self->length >= UART_TRCV_BUF_CAP) return false;
-    uint8_t tail = (self->head + self->length) % UART_TRCV_BUF_CAP;
-    self->packet[tail] = *pkt;
-    self->length++;
+bool uart_trcv_buf_push(UartTrcvBuf *self, const UartPacket *pkt) {
+    if (self->len >= UART_TRCV_BUF_CAP) return false;
+    uint8_t tail = (self->head + self->len) % UART_TRCV_BUF_CAP;
+    self->packets[tail] = *pkt;
+    self->len++;
     return true;
 }
 
-static bool trcv_buffer_get_front(const UartTrcvBuf *self, UartPacket *pkt) {
-    if (self->length == 0) return 0;
-    if (self != NULL) *pkt = self->packet[self->head];
+bool uart_trcv_buf_get_front(const UartTrcvBuf *self, UartPacket *pkt) {
+    if (self->len == 0) return 0;
+    *pkt = self->packets[self->head];
     return 1;
 }
 
@@ -112,10 +110,10 @@ static bool trcv_buffer_get_front(const UartTrcvBuf *self, UartPacket *pkt) {
  * @param pkt 輸出參數，接收彈出的 UART 封包 (output popped UART packet)
  * @return bool 是否彈出成功 (true if pop successful, false if buffer empty)
  */
-static bool trcv_buffer_pop(UartTrcvBuf *self, UartPacket *pkt) {
-    if (self->length == 0) return 0;
-    if (self != NULL) *pkt = self->packet[self->head];
-    if (--self->length == 0) {
+bool uart_trcv_buf_pop_front(UartTrcvBuf *self, UartPacket *pkt) {
+    if (self->len == 0) return 0;
+    if (pkt != NULL) *pkt = self->packets[self->head];
+    if (--self->len == 0) {
         self->head = 0;
     } else {
         self->head = (self->head + 1) % UART_TRCV_BUF_CAP;
@@ -131,11 +129,6 @@ static bool trcv_buffer_pop(UartTrcvBuf *self, UartPacket *pkt) {
  */
 UartTrcvBuf uart_trcv_buf_new(void) {
     UartTrcvBuf buf = {0};
-    buf.head    = 0;
-    buf.length  = 0;
-    buf.push        = trcv_buffer_push;
-    buf.get_front   = trcv_buffer_get_front;
-    buf.pop         = trcv_buffer_pop;
     return buf;
 }
 
@@ -143,15 +136,15 @@ UartTrcvBuf uart_trcv_buf_new(void) {
  * @brief 全域傳輸緩衝區
  *        Global transmit ring buffer
  */
-UartTrcvBuf uart_trsm_buf = {0};
+UartTrcvBuf uart_trsm_pkt_buf;
 
 /**
  * @brief 全域接收緩衝區
  *        Global receive ring buffer
  */
-UartTrcvBuf uart_recv_buf = {0};
+UartTrcvBuf uart_recv_pkt_buf;
 
 void uart_trcv_buf_init(void) {
-    uart_trsm_buf   = uart_trcv_buf_new();
-    uart_recv_buf   = uart_trcv_buf_new();
+    uart_trsm_pkt_buf = uart_trcv_buf_new();
+    uart_recv_pkt_buf = uart_trcv_buf_new();
 }
