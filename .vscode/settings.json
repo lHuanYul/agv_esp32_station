@@ -41,6 +41,7 @@
     "base.h": "c",
     "bitset": "c",
     "string_view": "c",
-    "regex": "c"
+    "regex": "c",
+    "http_parser.h": "c"
   }
 }
